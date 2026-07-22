@@ -1,0 +1,17 @@
+{
+  "_comment": "v6 global multi-region training set. bbox = [minlon, minlat, maxlon, maxlat]. catalog: 'gem' = GEM Global Active Faults (clone), 'qfaults' = USGS Qfaults_US_Database. role: train | val (val = whole region held out for monitoring). California [-125,31.5,-116.5,41] is EXCLUDED everywhere - it is the held-out TEST region (earth_dataset_v3 key_test.lst, directly comparable to v5). Bboxes checked: every region keeps >=1.6 deg (one tile footprint) clearance from the California test tiles, so the region-level split is leakage-free by construction.",
+  "regions": [
+    {"name": "japan",         "bbox": [136, 32, 144, 42],      "catalog": "gem",     "role": "train"},
+    {"name": "new_zealand",   "bbox": [166, -47, 179, -34],    "catalog": "gem",     "role": "train"},
+    {"name": "turkey_naf",    "bbox": [26, 36, 42, 42],        "catalog": "gem",     "role": "train"},
+    {"name": "italy",         "bbox": [9, 36, 18, 46],         "catalog": "gem",     "role": "train"},
+    {"name": "iran_zagros",   "bbox": [44, 26, 60, 38],        "catalog": "gem",     "role": "train"},
+    {"name": "himalaya_tibet","bbox": [78, 27, 96, 36],        "catalog": "gem",     "role": "train"},
+    {"name": "andes_chile",   "bbox": [-74, -38, -66, -18],    "catalog": "gem",     "role": "train"},
+    {"name": "baja_gulf_ca",  "bbox": [-115.5, 22, -108, 31],  "catalog": "gem",     "role": "train"},
+    {"name": "basin_range",   "bbox": [-116.0, 36, -110, 45],  "catalog": "qfaults", "role": "train"},
+    {"name": "cascadia",      "bbox": [-126, 42, -120, 49],    "catalog": "qfaults", "role": "train"},
+    {"name": "alaska",        "bbox": [-154, 58, -140, 65],    "catalog": "qfaults", "role": "train"},
+    {"name": "greece_aegean", "bbox": [19, 34, 29, 42],        "catalog": "gem",     "role": "val"}
+  ]
+}

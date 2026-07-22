@@ -1,0 +1,15 @@
+dataMode: both
+dataset: earth_dataset_v3/key_train.lst
+gpuIndex: 0
+batchsize: 2
+lr0: 0.0001
+stepPerMiniBatch: 4
+resDir: train_v5_local/
+mn: 256
+job: train
+isAtten: False
+alpha: 0.1
+dw: 0.08
+d0: 0.02
+dropout: 0.0
+modelType: mars_sam

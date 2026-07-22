@@ -1,0 +1,45 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Large datasets and model weights (store outside ordinary Git history)
+*.h5
+*.hdf5
+*.nc
+*.pt
+*.pth
+qfaults.kmz
+Qfaults_GIS/SHP/Qfaults_US_Database.*
+*.sbn
+*.sbx
+*.shp.xml
+
+# Generated training/build outputs
+outputs/
+regions_v6/
+earth_dataset_global/
+slurm_*.out
+slurm_*.err
+wandb/
+runs/
+
+# Redistributable papers should be linked from README instead of committed
+SAM_paper_SegmentAnything_2023.pdf
+SAM2_paper_2024.pdf
+Knapmeyer_2006_Mars_seismicity.pdf
