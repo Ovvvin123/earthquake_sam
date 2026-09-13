@@ -47,7 +47,7 @@ class RandomScaleRotateBatch_:
         """
         self.scale = scale
         self.degrees = degrees
-
+    
     def random_scale_rotate(self, img, size):
         """
         对单张图像进行随机缩放和旋转。
@@ -63,15 +63,15 @@ class RandomScaleRotateBatch_:
         scale_factor = np.random.uniform(self.scale[0], self.scale[1])
         height, width = int(img.height * scale_factor), int(img.width * scale_factor)
         img = F.resize(img, (height, width))
-
+        
         # 随机旋转
         angle = np.random.uniform(-self.degrees, self.degrees)
         img = F.rotate(img, angle)
-
+        
         # 调整回原尺寸
         img = F.resize(img, size)
         return img
-
+    
     def __call__(self, images):
         """
         对形状为 (B, C, H, W) 的图像批量进行随机缩放和旋转，并保持尺寸不变。
@@ -84,7 +84,7 @@ class RandomScaleRotateBatch_:
         """
         batch_size, channels, height, width = images.shape
         size = (height, width)
-
+        
         to_pil_image = transforms.ToPILImage()
         to_tensor = transforms.ToTensor()
 
@@ -122,10 +122,10 @@ def resize_array_with_zoom(arr, target_shape):
     dtype0 = arr.dtype
     M, N = arr.shape
     m, n = target_shape
-
+    
     # 计算缩放因子
     zoom_factors = (m / M, n / N)
-
+    
     # 使用 zoom 函数进行插值
     resized_array = zoom(arr.astype('float32'), zoom_factors, order=3)  # order=3 使用三次样条插值
 
@@ -144,10 +144,10 @@ def resize_array_with_zoom3d_(arr, target_shape):
     dtype0 = arr.dtype
     M, N = arr.shape[1:]
     m, n = target_shape
-
+    
     # 计算缩放因子
     zoom_factors = (1,m / M, n / N)
-
+    
     # 使用 zoom 函数进行插值
     resized_array = zoom(arr.astype('float32'), zoom_factors, order=3)  # order=3 使用三次样条插值
 
@@ -169,20 +169,20 @@ def resize_array_with_zoom3d(arr, target_shape):
     dtype0 = arr.dtype
     M, N = arr.shape[1:]
     m, n = target_shape
-
+    
     # 计算缩放因子
     zoom_factors = ( m / M, n / N)
-
+    
     def process_slice(i):
         return zoom(arr[i].astype('float32'), zoom_factors, order=3)
-
+    
     # 使用 ThreadPoolExecutor 进行并行处理
     with ThreadPoolExecutor() as executor:
         resized_slices = list(executor.map(process_slice, range(arr.shape[0])))
-
+    
     # 将结果拼接回原来的形状
     resized_array = np.stack(resized_slices)
-
+    
     return resized_array.astype(dtype0)
 class RandomScaleRotateBatch:
     def __init__(self, scale=(0.8, 1.2), degrees=45):
@@ -195,7 +195,7 @@ class RandomScaleRotateBatch:
         """
         self.scale = scale
         self.degrees = degrees
-
+    
     def random_scale_rotate(self, img, size):
         """
         对单张图像进行随机缩放和旋转。
@@ -212,7 +212,7 @@ class RandomScaleRotateBatch:
         _, h, w = img.shape
         new_h, new_w = int(h * scale_factor), int(w * scale_factor)
         img = F.interpolate(img.unsqueeze(0), size=(new_h, new_w), mode='bilinear', align_corners=False).squeeze(0)
-
+        
         # 随机旋转
         angle = np.random.uniform(-self.degrees, self.degrees)
         angle_rad = np.deg2rad(angle)
@@ -220,14 +220,14 @@ class RandomScaleRotateBatch:
             [np.cos(angle_rad), -np.sin(angle_rad), 0],
             [np.sin(angle_rad), np.cos(angle_rad), 0]
         ], dtype=torch.float).to(img.device)
-
+        
         grid = F.affine_grid(theta.unsqueeze(0), img.unsqueeze(0).size())
         img = F.grid_sample(img.unsqueeze(0), grid).squeeze(0)
-
+        
         # 调整回原尺寸
         img = F.interpolate(img.unsqueeze(0), size=size, mode='bilinear', align_corners=False).squeeze(0)
         return img
-
+    
     def __call__(self, images):
         """
         对形状为 (B, C, H, W) 的图像批量进行随机缩放和旋转，并保持尺寸不变。
@@ -306,7 +306,7 @@ def equalAngle(srcH5,dstH5):
                         for i0 in range(0,M,inter):
                             #La = la[i]
                             print(i0)
-                            i1 = min(i0+inter,M)
+                            i1 = min(i0+inter,M) 
                             #scale = np.cos(np.deg2rad(La))
                             data =src[key][:,i0:i1].astype('float')
                             dataSet[:,i0:i1] = interpolate.interp1d(la,data,kind='linear',bounds_error=False,fill_value=np.nan,axis=0)(laNew).astype(dataSet.dtype)
@@ -317,10 +317,10 @@ def equalAngle(srcH5,dstH5):
                         plt.savefig('show/'+key+'.jpg')
                         plt.close()
                 else:
-                    dst.copy(src[key],key)
+                    dst.copy(src[key],key) 
             del(dst['la'])
             dst['la']= laNew
-
+                    
 def toH5(dirname,dG=4,N=11855,trans=False,isT=True,isR=False,isMola=False,laN=999999,laMin=999999,laMax=999999,loMin=999999,loMax=999999,resFile=''):
     #convert .tif to .h5
     if isinstance(dG,list):
@@ -334,9 +334,9 @@ def toH5(dirname,dG=4,N=11855,trans=False,isT=True,isR=False,isMola=False,laN=99
         Nla = N
         Nlo = N
     filenames = glob(dirname+'/*.tif')
-
+    
     if laMin==999999:
-        laMin = 90000
+        laMin = 90000 
         laMax = -100000
         loMin = 90000
         loMax = -100000
@@ -345,13 +345,13 @@ def toH5(dirname,dG=4,N=11855,trans=False,isT=True,isR=False,isMola=False,laN=99
             lo = toInt(loStr[1:])
             la = toInt(laStr[1:])
             laMin = min(laMin,la)
-            laMax = max(laMax,la)
+            laMax = max(laMax,la)  
             loMin = min(loMin,lo)
             loMax = max(loMin,lo)
             laMax = laMax+dGla
         loMax = loMax+dGlo
-
-
+        
+    
     laL = np.arange(laMin,laMax,1/Nla)
     loL = np.arange(loMin,loMax,1/Nlo)
     print(laMin,laMax,loMin,loMax)
@@ -380,7 +380,7 @@ def toH5(dirname,dG=4,N=11855,trans=False,isT=True,isR=False,isMola=False,laN=99
             else:
                 image=Image.open(filename)
                 print(image.size)
-
+                
                 if isMola:
                     #pass
                     NLo,NLa = image.size
@@ -392,7 +392,7 @@ def toH5(dirname,dG=4,N=11855,trans=False,isT=True,isR=False,isMola=False,laN=99
                 if image.size!=(NLo,NLa):
                     print('trans',(NLo,NLa))
                     image.thumbnail((NLo,NLa))
-
+                
                 image=np.array(image)
                 print(image.shape)
                 if count==0:
@@ -407,7 +407,7 @@ def toH5(dirname,dG=4,N=11855,trans=False,isT=True,isR=False,isMola=False,laN=99
                     f['image'][laIndex:laIndex+NLa,loIndex:loIndex+NLo] = image
                 if count%100==0:
                     plt.figure(figsize=(10,10))
-                    a = plt.gca()
+                    a = plt.gca()   
                     a.pcolorfast(image[::4,::4],cmap='jet')
                     #plt.colorbar()
                     plt.savefig(f'show/{count}.jpg')
@@ -415,9 +415,9 @@ def toH5(dirname,dG=4,N=11855,trans=False,isT=True,isR=False,isMola=False,laN=99
         else:
             print('skiping',count)
         count+=1
-    with File(resFile,'r') as f:
+    with File(resFile,'r') as f: 
         plt.figure(figsize=(10,10))
-        a = plt.gca()
+        a = plt.gca()   
         a.pcolorfast(f['image'][::100,::100],cmap='jet')
         #plt.colorbar()
         plt.savefig('show/all.jpg')
@@ -464,7 +464,7 @@ def toTif(sourceDir,targetDir,dG=4,N=11855,):
         image = image.convert('F')
         # 创建16位整数模式的新图像
         #image = Image.fromarray(img_array, 'F')
-
+                
         if image.size!=(int(Nlo*dGlo),int(Nla*dGla)):
             print('trans',(Nlo*dGlo,Nla*dGla))
             #image.thumbnail((Nlo*dGlo,Nla*dGla))
@@ -472,23 +472,23 @@ def toTif(sourceDir,targetDir,dG=4,N=11855,):
         #print(image.mode)
         #image=image.convert('I;16')
         image.save(savename,)
-
+                
 def getPolygon(sf,i,R=[]):
     # get shapefile polygon of index i in R
     # if fault not in R, return [],[].R =[min_lat,max_lat,min_lon,max_lon ]
     # else return x_lon,y_lat
     shape = sf.shape(i)
-
+    
     if len(R)!=0:
         Lo0,La0,Lo1,La1=shape.bbox
         la0,la1,lo0,lo1 = R
         if La1<la0 or La0>la1 or Lo1<lo0 or Lo0>lo1:
             return [],[]
-
+    
     x_lon = np.zeros((len(shape.points)))
     y_lat = np.zeros((len(shape.points)))
     x_lon,y_lat = np.array(shape.points).transpose()
-
+    
     return x_lon,y_lat
 def fault2dis(h5file,faultfile,maxDis=0.2,head='test',keys=['']):
     faultname = os.path.basename(faultfile)[:-4]
@@ -536,7 +536,7 @@ def fault2dis(h5file,faultfile,maxDis=0.2,head='test',keys=['']):
                     continue
                 print(loIndex0,loIndex1,laIndex0,laIndex1)
                 dla0 = laL[laIndex0:laIndex1].reshape(-1,1)-la0
-                dla1 = laL[laIndex0:laIndex1].reshape(-1,1)-la1
+                dla1 = laL[laIndex0:laIndex1].reshape(-1,1)-la1 
                 dlo0 = loL[loIndex0:loIndex1].reshape(1,-1)-lo0
                 dlo1 = loL[loIndex0:loIndex1].reshape(1,-1)-lo1
                 r = ((la0-la1)**2+(lo0-lo1)**2*scale**2)**0.5
@@ -571,7 +571,7 @@ def fault2dis(h5file,faultfile,maxDis=0.2,head='test',keys=['']):
                     plt.plot(x_lon,y_lat,'r-',linewidth=1)
                     plt.title('distance')
                     plt.gca().set_aspect(1/np.cos(np.mean(y_lat)*np.pi/180))
-
+                    
                     plt.colorbar()
                     plt.subplot(2,1,2)
                     plt.pcolor(loL[loIndex0:loIndex1],laL[laIndex0:laIndex1],f['image'][laIndex0:laIndex1,loIndex0:loIndex1],cmap='gray',rasterized=True)
@@ -589,7 +589,7 @@ def fault2dis(h5file,faultfile,maxDis=0.2,head='test',keys=['']):
 def findPotential(h5file,d=1024):
     with File(h5file,'a') as f:
         for key in f:
-
+            
             if 'tectonics' in key:
                 basename = key.split('_')[1]
                 name = basename+'_potential'
@@ -683,19 +683,19 @@ def count_parameters(model):
     """
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
+    
     return total_params, trainable_params
 
 class Generator(data_utils.Dataset):
     def __init__ (self,filename,m=256,n=256,maxLoop=1000000000,potentail=False,pCheck=False,inter=1,mode='mola',loMin=-180,loMax=180,isData=False,isEq=False):
         with File(filename,'r') as f:
             if isData:
-
+                
                 self.f ={ key: f[key][:] for key in f}
                 self.d = int(f['Compression_potential'].attrs['d'])
                 #f = self.f
             else:
-                #self.f= File(filename,'r')
+                #self.f= File(filename,'r') 
                 #f = self.f
                 self.d = int(f['Compression_potential'].attrs['d'])
                 self.f = filename
@@ -725,12 +725,12 @@ class Generator(data_utils.Dataset):
                 self.laloL = laloL
         #self.f = filename
         #if isinstance(self.f ,str):
-        #    self.f = File(self.f,'r')
+        #    self.f = File(self.f,'r')  
     def __len__(self):
         if self.potentail:
             return len(self.laloL)
             return (len(self.laloL)*self.d*self.d)//(self.n*self.m)//10
-
+        
         else:
             return self.NLa*self.NLo//self.n//self.m
     def __getitem__(self, index):
@@ -740,7 +740,7 @@ class Generator(data_utils.Dataset):
         inter = self.inter
         for i in range(1000000):
             if self.potentail and np.random.rand()>0.2:
-                index = np.random.randint(0,len(self.laloL))
+                index = np.random.randint(0,len(self.laloL))    
                 laIndex,loIndex = self.laloL[index]
                 laIndex = int(laIndex+ self.d*(np.random.random()-0.5))-self.n//2
                 loIndex = int(loIndex+ self.d*(np.random.random()-0.5))-self.m//2
@@ -773,7 +773,7 @@ class Generator(data_utils.Dataset):
                 loIndex = self.NLo-M-1
             if self.loL[loIndex]>=self.loMin and self.loL[(loIndex+M-1)%len(self.loL)]<self.loMax:# and self.laL[laIndex]<88 and self.laL[laIndex]>-88:
                 break
-        if self.mode=='mola':
+        if self.mode=='mola':    
             image =self.f['mola'][laIndex:laIndex+N,np.arange(loIndex,loIndex+M)%len(self.loL)]
             image=image.astype(np.float32)#/1e9
             image[image<-2147483647]=0#np.nan
@@ -794,16 +794,16 @@ class Generator(data_utils.Dataset):
             image = (image-imageMean)/1e8#/#(imageMax-imageMin+1e-9)
             image = image/0.25
             image[np.isnan(image)]=-10
-
+            
             image1 =self.f['CTX'][laIndex:laIndex+N,np.arange(loIndex,loIndex+M)%len(self.loL)]
             image1=image1.astype(np.float32)#/1e9
             image1[image1<-2147483647]=0#np.nan
             image1 = image1/255
             image1 = (image1-0.5)/0.12
-
+            
             image = np.stack([image,image1],axis=0)
-
-
+            
+            
         else:
             image =self.f['image'][laIndex:laIndex+N,loIndex:loIndex+M].astype(np.float32)/255
         te    =  self.f['tectonics_Extention'][laIndex:laIndex+N,np.arange(loIndex,loIndex+M)%len(self.loL)].astype(np.float32)
@@ -836,7 +836,7 @@ class Generator(data_utils.Dataset):
         #tc=np.nan_to_num(tc,999)
         image = image.astype(np.float32)
         image = np.clip(image,-20,20)
-
+        
         te = te.astype(np.float32)
         tc = tc.astype(np.float32)
         scale = scale.astype(np.float32)
@@ -844,21 +844,24 @@ class Generator(data_utils.Dataset):
         te = np.where(np.isnan(te),999,te)
         tc = np.where(np.isnan(tc),999,tc)
         scale = np.where(np.isnan(scale),1,scale)
-
+        
         if np.random.rand()>0.5:
             return image[:,::inter,::inter]+0,te[::inter,::inter]+0,tc[::inter,::inter]+0,scale[::inter,::inter]+0
         else:
             return image[:,::inter,::inter].transpose(0,2,1)+0,te[::inter,::inter].transpose()+0,tc[::inter,::inter].transpose()+0,scale[::inter,::inter].transpose()+0
 from scipy.ndimage import zoom
 class Generator_new(data_utils.Dataset):
-    def __init__ (self,filename,key_list,m=256,n=256,training=False,isOthers=False):
+    def __init__ (self,filename,key_list,m=256,n=256,training=False,isOthers=False,fixed_crop=False):
+        if fixed_crop and training:
+            raise ValueError('fixed_crop requires training=False')
+        self.fixed_crop = fixed_crop
         self.filename = filename
         #print(key_list)
         self.list = key_list
         self.m = m
         self.n = n
-        self.training = training
-        self.isOthers = isOthers
+        self.training = training   
+        self.isOthers = isOthers 
         self.dataD = {}
     def __len__(self):
         return len(self.list)
@@ -871,18 +874,18 @@ class Generator_new(data_utils.Dataset):
                 CTX = f[index]['CTX'][:].astype(np.float32)
                 mole = f[index]['image'][:].astype(np.float32)
                 TW  = f[index]['TW'][:].astype(np.float32)
-
+                
                 valid_0 = np.where(CTX>-2147483647,1,0)
                 valid_1 = np.where(mole>-2147483647,1,0)
-
+                
                 CTX [CTX <-2147483647]=0#np.nan
                 CTX  = CTX /255
                 CTX  = (CTX -0.5)/0.5
-
+                
                 TW [TW <-2147483647]=0#np.nan
                 TW  = TW /255
                 TW  = (TW -0.5)/0.5
-
+                
                 mole[mole<-2147483647]=np.nan
                 #imageMax = image.max()
                 #print(mole.min())
@@ -892,19 +895,19 @@ class Generator_new(data_utils.Dataset):
                 imageStd = np.nanstd(mole) + 1e-6
                 mole = (mole - imageMean) / imageStd
                 mole[np.isnan(mole)]=0
-
+                
                 te = f[index]['k0'][:].astype(np.float32)
                 tc = f[index]['k1'][:].astype(np.float32)
-
+                
                 te[te<0]=999
                 tc[tc<0]=999
-
+                
                 #print(tc[tc<100].max())
                 #exit()
                 tc[tc>0.35]=0.35001
                 te[te>0.35]=0.35001
                 if 'k2' in f[index]:
-
+                    
                     to = f[index]['k2'][:].astype(np.float32)
                     #print(to.max())
                     to[to<0]=999
@@ -918,7 +921,7 @@ class Generator_new(data_utils.Dataset):
                 self.dataD[index] = CTX,mole,te,tc,valid_0,valid_1,TW,to
         #te[te<0]=999
         #tc[tc<0]=999
-
+        
         if self.training:
             scale = np.random.rand()*0.5+0.75
             te = zoom(te.astype('float32'), scale, order=1)
@@ -934,7 +937,7 @@ class Generator_new(data_utils.Dataset):
             #    valid_1 = valid_0*valid_1
             #    mole = np.where(valid_1>0.5,mole,0).astype('float32')
             TW = np.array([zoom(TW[c].astype('float32'), scale, order=1)for c in range(3)])
-
+            
         else:
             te = te.astype('float32')
             tc = tc.astype('float32')
@@ -944,7 +947,7 @@ class Generator_new(data_utils.Dataset):
             valid_0 = valid_0.astype('float32')
             valid_1 = valid_1.astype('float32')
             TW = np.array([TW[c].astype('float32')for c in range(3)])
-
+        
         if False:
             H,W = valid_0.shape
             hL = np.linspace(0,1,H).reshape(-1,1)
@@ -972,8 +975,8 @@ class Generator_new(data_utils.Dataset):
                 else:
                     valid_1= np.where(A*hL**2+B*wL**2<C,0,valid_1).astype('float32')
                 mole = mole*valid_1
-
-
+            
+            
             if np.random.random()>0.5 and self.training:
                 angle = np.random.randint(-20,20)
                 CTX = torch.from_numpy(CTX).unsqueeze(0)
@@ -990,10 +993,16 @@ class Generator_new(data_utils.Dataset):
                 valid_0=transforms.RandomRotation([angle,angle], )(valid_0).squeeze(0).numpy()
                 valid_1=transforms.RandomRotation([angle,angle], )(valid_1).squeeze(0).numpy()
                 TW = transforms.RandomRotation([angle,angle], )(TW).numpy()
-
-        i0 = np.random.randint(0,CTX.shape[0]-self.n)
-        j0 = np.random.randint(0,CTX.shape[1]-self.m)
-
+            
+        if self.fixed_crop:
+            if CTX.shape[0] < self.n or CTX.shape[1] < self.m:
+                raise ValueError('Fixed crop is larger than the source tile')
+            i0 = (CTX.shape[0] - self.n) // 2
+            j0 = (CTX.shape[1] - self.m) // 2
+        else:
+            i0 = np.random.randint(0,CTX.shape[0]-self.n)
+            j0 = np.random.randint(0,CTX.shape[1]-self.m)
+        
         valid_0 = np.where(valid_0>0.5,1.,0.).astype('float32')
         valid_1 = np.where(valid_1>0.5,1.,0.).astype('float32')
         inputs = np.concatenate([
@@ -1034,10 +1043,10 @@ class Generator_new(data_utils.Dataset):
                 return CTX[i0:i0+self.n,j0:j0+self.m][:,::-1],mole[i0:i0+self.n,j0:j0+self.m][:,::-1],te[i0:i0+self.n,j0:j0+self.m][:,::-1],tc[i0:i0+self.n,j0:j0+self.m][:,::-1],valid_0[i0:i0+self.n,j0:j0+self.m][:,::-1],valid_1[i0:i0+self.n,j0:j0+self.m][:,::-1]
             else:
                 return CTX[i0:i0+self.n,j0:j0+self.m][::-1,::-1],mole[i0:i0+self.n,j0:j0+self.m][::-1,::-1],te[i0:i0+self.n,j0:j0+self.m][::-1,::-1],tc[i0:i0+self.n,j0:j0+self.m][::-1,::-1],valid_0[i0:i0+self.n,j0:j0+self.m][::-1,::-1],valid_1[i0:i0+self.n,j0:j0+self.m][::-1,::-1]
-
-
-
-
+        
+        
+        
+        
 import torch
 torch.manual_seed(1)
 #torch.cuda.manual_seed_all(1)
@@ -1078,10 +1087,10 @@ import numpy as np
 def downsample_h5(input_file, output_file, dataset_name, factor=10, method='average',dataset_name_out='',dtype='',d0=-1):
     with h5py.File(input_file, 'r') as f_in:
         data = f_in[dataset_name]
-
+       
         if dataset_name_out=='':
             dataset_name_out = dataset_name
-
+        
         #print(data.dtype)
         #exit()
         data = data[:]
@@ -1091,7 +1100,7 @@ def downsample_h5(input_file, output_file, dataset_name, factor=10, method='aver
         # 计算降采样后的形状
         H_down = H // factor
         W_down = W // factor
-
+        
         # 处理边界情况，使得降采样可以均匀处理整个数组
         H_new = H_down * factor
         W_new = W_down * factor
@@ -1118,18 +1127,18 @@ def downsample_h5(input_file, output_file, dataset_name, factor=10, method='aver
             data_cropped = np.where(data_cropped>d_max,data_cropped[0,0,0]*0,data_cropped[0,0,0]*0+255.)
         if dtype=='':
             dtype = data_cropped.dtype
-
+        
         # 重新定义形状以进行降采样
         print('downsampling',dataset_name)
         data_reshaped = data_cropped.reshape(C, H_down, factor, W_down, factor)
-
+        
         if method == 'average':
             downsampled = data_reshaped.mean(axis=(2, 4))
         elif method == 'max':
             downsampled = data_reshaped.max(axis=(2, 4))
         else:
             raise ValueError("Invalid method. Use 'average' or 'max'.")
-
+        
         # 将降采样后的数组保存到新的HDF5文件中
         print('writing',dataset_name)
         with h5py.File(output_file, 'a') as f_out:
@@ -1150,7 +1159,7 @@ def fitFault(points, method='cubic'):
     """
     lo, la = points.transpose()
     z = np.arange(len(lo))*0.1
-
+    
     # 对 lo 和 la 进行整体插值
     if method == 'cubic':
         interp_lo = interpolate.CubicSpline(z, lo)
@@ -1160,14 +1169,14 @@ def fitFault(points, method='cubic'):
         interp_la = interpolate.interp1d(z, la, kind='linear', fill_value="extrapolate")
     else:
         raise ValueError("Unsupported interpolation method. Use 'cubic' or 'linear'.")
-
+    
     # 计算导数（斜率）
     d_lo_dz = interp_lo.derivative()(z)
     d_la_dz = interp_la.derivative()(z)
-
+    
     # 根据局部的 latitude 计算 scale 因子
     scale = np.cos(np.deg2rad(la))
-
+    
     # 计算斜率角度 theta
     # 对 theta 进行滤波，考虑其周期性
     theta = np.arctan2(d_la_dz, d_lo_dz * scale)
@@ -1188,7 +1197,7 @@ def fitFault(points, method='cubic'):
     theta_smoothed = theta*0+theta.mean()
     theta = np.mod(theta_smoothed + np.pi, 2 * np.pi) - np.pi  # 将结果重新映射到 [-π, π]
     return theta
-
+    
 def generatePerpendicularPoints(points, width, spacing, method='cubic'):
     """
     根据给定的断层点，生成每个点垂直于断层方向的若干点。
@@ -1238,7 +1247,7 @@ if __name__ =='__main__':
         #fault2dis('/home/jiangyr/data/mola/all_128.h5','tectonics_Extention.shp',maxDis=0.3)
         fault2dis('/home/jiangyr/data/mola/all_128.h5','tectonics_Compression.shp',maxDis=0.3,head='Compression')
         #fault2dis(h5File,'tectonics_Compression.shp',maxDis=0.3,head='Compression')
-
+    
     if 'molaNew' in sys.argv:
         toH5('/data/jiangyr/data/mola/',dG=[180,360],N=106694/360,trans=False,isT=False,isR=True,isMola=True)
     if 'molaNewF' in sys.argv:
@@ -1249,10 +1258,10 @@ if __name__ =='__main__':
         equalArea('/home/jiangyr/data/molaNew/all_296.h5','/home/jiangyr/data/molaNew/all_eq_296.h5')
     if 'molaEqA' in sys.argv:
         equalAngle('/home/jiangyr/data/molaNew/all_296.h5','/home/jiangyr/data/molaNew/all_eqA_296.h5')
-
+    
     if 'CTXEqA' in sys.argv:
         equalAngle('/Volumes/ZTData/data/CTX_296.h5','/Volumes/ZTData/data/CTX_eqA_296.h5')
-
+    
     if 'merge' in sys.argv:
         with File('/Volumes/ZTData/data/all_eqA_296.h5','a') as f:
             with File('/Volumes/ZTData/data/CTX_eqA_296.h5','r') as g:
@@ -1261,7 +1270,7 @@ if __name__ =='__main__':
                 print(g['image'].dtype)
                 f['CTX'] = g['image'][:].astype(np.float16)
     if 'toDis' in sys.argv:
-        dataFile  = '/data/jiangyr/data/mola/all_296.h5'
+        dataFile  = '/data/jiangyr/data/mola/all_296.h5' 
         fault2dis(dataFile,'data/tectonics_Extention.shp',maxDis=0.4,head='Extention')
         fault2dis(dataFile,'data/tectonics_Compression.shp',maxDis=0.4,head='Compression')
     if 'merge296' in sys.argv:
@@ -1275,19 +1284,19 @@ if __name__ =='__main__':
         h5File_in = '/data/jiangyr/data/all_296.h5'
         tiffFile = '/home/jiangyr/HX1_GRAS_MoRIC_DOM_076m_Global_00N00E_A.tif'
         import rasterio
-        from scipy import signal
+        from scipy import signal 
         with rasterio.open(tiffFile) as src:
             dataset = src
             if False:
                 print(f"Width: {dataset.width}, Height: {dataset.height}")
-
+        
                 # 打印图像的仿射变换（表示每个像素的大小及其位置）
                 print(f"Affine: {dataset.transform}")
-
+                
                 # 获取图像的地理范围（边界框）
                 bounds = dataset.bounds
                 print(f"Bounds: {bounds}")
-
+                
                 # 获取图像的坐标参考系统（CRS）
                 print(f"CRS: {dataset.crs}")
 
@@ -1303,11 +1312,11 @@ if __name__ =='__main__':
                 laL_tiff = 90-np.arange(140387)/140386*180
                 loL_tiff = np.arange(280775)/280774*360-180
                 for i in range(len(laL)):
-
+                    
                     la = laL[i]
                     laIndex_tiff = np.abs(laL_tiff-la).argmin()
                     print(i/len(laL),i,la,laIndex_tiff)
-
+                    
                     line = src.read([1, 2, 3],window=((laIndex_tiff,laIndex_tiff+1),(0,280775)))[:,0].astype('float32')
                     #print(line.shape)
                     #exit()
@@ -1320,7 +1329,7 @@ if __name__ =='__main__':
                     a = 140387//8, 140387//4
                     b = 280775//8, 280775//4
                     window =(a,b)
-                    block = src.read(window=window)
+                    block = src.read(window=window) 
                     print(block.shape)
                     plt.imshow(block.transpose([1,2,0]))
                     plt.savefig(f'test.jpg',dpi=300)

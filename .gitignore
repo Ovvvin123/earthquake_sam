@@ -43,3 +43,16 @@ runs/
 SAM_paper_SegmentAnything_2023.pdf
 SAM2_paper_2024.pdf
 Knapmeyer_2006_Mars_seismicity.pdf
+
+# WSL runs, local backups and generated diagnostics
+SAM_code_extracted/SAM code/_backup_before_*/
+SAM_code_extracted/SAM code/train_v5_ema_smoke/
+SAM_code_extracted/SAM code/train_v5_online*/
+SAM_code_extracted/SAM code/train_v5_wsl/
+SAM_code_extracted/SAM code/wsl_validation/
+wsl-setup/validation/
+wsl-setup/exit-code.txt
+*.log
+*.npz
+*.pem
+*.key

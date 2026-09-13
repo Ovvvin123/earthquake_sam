@@ -28,26 +28,18 @@ Input channels written per tile (consumed by Generator_new as 7 channels:
 
 Stored tiles are 384 px; Generator_new random-crops 256 (so tiles MUST be >256).
 """
-import argparse
 import os, json, numpy as np, h5py, netCDF4 as nc, geopandas as gpd, warnings
 from datetime import datetime
-from pathlib import Path
 from scipy.ndimage import distance_transform_edt
 from matplotlib.colors import LightSource
-from project_paths import CODE_DIR, GEBCO_FILE, QFAULTS_FILE, resolve_input, resolve_output, require_file
 warnings.filterwarnings('ignore')
 
-ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-ap.add_argument('--nc', default=str(GEBCO_FILE), help='regional GEBCO netCDF file')
-ap.add_argument('--shp', default=str(QFAULTS_FILE), help='fault catalog shapefile')
-ap.add_argument('--out', default=str(CODE_DIR / 'earth_dataset_local'), help='output dataset directory')
-args = ap.parse_args()
-
-NC = require_file(resolve_input(args.nc), 'GEBCO netCDF file')
-SHP = require_file(resolve_input(args.shp), 'fault shapefile')
-OUTDIR = resolve_output(args.out)
-OUTDIR.mkdir(parents=True, exist_ok=True)
-H5 = OUTDIR / 'faults.h5'
+BASE = "/sessions/hopeful-great-ptolemy/mnt/Earthquake - SAM"
+NC   = f"{BASE}/GEBCO_California/gebco_2026_n50.0_s19.0_w-129.0_e-110.0.nc"
+SHP  = f"{BASE}/Qfaults_GIS/SHP/ca_offshore.shp"
+OUTDIR = f"{BASE}/earth_dataset"
+os.makedirs(OUTDIR, exist_ok=True)
+H5 = f"{OUTDIR}/ca_offshore_faults.h5"
 
 # ---- parameters ----
 TILE   = 384            # stored tile size (px); must be > CROP
@@ -195,8 +187,8 @@ with h5py.File(H5,'w') as f:
 # ---- write split lists + manifest + provenance ----
 for sp in ['train','val','test']:
     ks=[m['key'] for m in manifest if m['split']==sp]
-    with open(OUTDIR / f"key_{sp}.lst",'w') as fk: fk.write('\n'.join(ks)+('\n' if ks else ''))
-with open(OUTDIR / "key.lst",'w') as fk:
+    with open(f"{OUTDIR}/key_{sp}.lst",'w') as fk: fk.write('\n'.join(ks)+('\n' if ks else ''))
+with open(f"{OUTDIR}/key.lst",'w') as fk:
     fk.write('\n'.join(m['key'] for m in manifest)+'\n')
 prov=dict(created=datetime.utcnow().isoformat()+'Z',
           bathymetry="GEBCO 2026 15-arcsec", fault_catalog="USGS ca_offshore.shp (Qfaults 2020)",
@@ -210,7 +202,7 @@ prov=dict(created=datetime.utcnow().isoformat()+'Z',
           split=dict(method="contiguous latitude blocks; boundary-crossing tiles dropped (no leakage)",
                      test="lat < %.1f"%TEST_LAT_MAX, train="%.1f < lat < %.1f"%TRAIN_LAT,
                      val="lat > %.1f"%VAL_LAT_MIN))
-json.dump({'provenance':prov,'tiles':manifest}, open(OUTDIR / "manifest.json",'w'), indent=2)
+json.dump({'provenance':prov,'tiles':manifest}, open(f"{OUTDIR}/manifest.json",'w'), indent=2)
 
 print(f"\nDONE  tiles={len(manifest)}  train/val/test={counts}  pos={pos} neg={neg}")
 print(f"  -> {H5}")

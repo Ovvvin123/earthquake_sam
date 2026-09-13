@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 from matplotlib import pyplot as plt
 from tool import Generator, data_utils,select_device,findPotential,fault2dis,showPotential,checkPotential,collate_function,RandomScaleRotateBatch,Generator_new,resize_array_with_zoom3d,resize_array_with_zoom,downsample_h5,count_parameters
 
@@ -11,32 +10,25 @@ import random
 import sys
 from h5py import File
 import numpy as np
-import os
+import os 
 from scipy.ndimage import zoom
 from scipy.signal import resample
 from scipy import fft
 from matplotlib import cm
 from config import args,write_config
-from project_paths import CODE_DIR, DATA_H5, resolve_input, resolve_output, require_file
 
 
 torch.manual_seed(0)
 np.random.seed(0)
 random.seed(0)
-# Resolve paths independently of whether this script is launched from the
-# project root or from the historical "SAM code" directory.
-keylist_train = resolve_input(args.dataset)
-require_file(keylist_train, 'training key list')
-args.dataset = str(keylist_train)
-
-candidate_h5 = keylist_train.parent / 'faults.h5'
-trainFile = str(candidate_h5 if candidate_h5.is_file() else DATA_H5)
-require_file(Path(trainFile), 'training HDF5 dataset')
-dataFile = trainFile
-
-args.resDir = os.path.join(str(resolve_output(args.resDir)), '')
-if args.datasetAdd:
-    args.datasetAdd = str(resolve_input(args.datasetAdd))
+# PATCH (v6): derive the h5 from --dataset so any dataset dir works without
+# editing this file (e.g. --dataset earth_dataset_global/key_train.lst).
+_dsd = os.path.dirname(args.dataset)
+if _dsd and os.path.exists(os.path.join(_dsd, 'faults.h5')):
+    trainFile = os.path.join(_dsd, 'faults.h5')
+else:
+    trainFile = 'earth_dataset_v3/faults.h5'
+dataFile = 'earth_dataset/ca_offshore_faults.h5'
 #trainFile = '/H5/all_eqA_296_tomark_other.h5'
 
 if args.job =='outputAllKey':
@@ -78,19 +70,19 @@ if args.job =='outputAllKeyOtherSelect':
                 if key not in keys_select_old:
                     continue
             f.write(key+'\n')
-
-
-
+                
+    
+        
 
 keylist_train = args.dataset
 keylist_train_added = args.datasetAdd
 keyL_h5_added = []
 with open(keylist_train,'r') as f:
-    keyL_h5 = [key for key in f.read().splitlines() if key]
+    keyL_h5 = f.read().split('\n')[:-1]
 
 if keylist_train_added != '':
     with open(keylist_train_added,'r') as f:
-        tmp = [key for key in f.read().splitlines() if key]
+        tmp = f.read().split('\n')[:-1]
     for key in tmp:
         if key not in keyL_h5:
             keyL_h5_added.append(key)
@@ -119,16 +111,16 @@ from tool import point2length
 
 
 if __name__ == '__main__':
-
+    
     #from UnetModelTensor import UModel as UnetModel,IoU,backend,keras
     from torchUnet import UNet,norm2,denorm2,huber_loss,torch,WarmupDecayScheduler,IoU,conv_sam,Dice,FocalTversky
-
+    
     if args.job == 'extract_value':
         from shapefile import Reader
-
+        
         faultFile = args.faultFile
-
-
+        
+        
         faultFile_value = faultFile.replace('.shp','_value.h5')
         k0 = args.value
         file = args.valueFile
@@ -158,14 +150,14 @@ if __name__ == '__main__':
                         fault_group = res[fault_name]
                     if k0 in fault_group:
                         del fault_group[k0]
-
+                    
                     #import numpy as np
 
                     # 假设 la 和 lo 是升序排列的
                     I = np.searchsorted(la, points[:,1])
                     J = np.searchsorted(lo, points[:,0])
-
-
+                    
+                    
 
                     # 限制 I, J 在合法范围内
                     I = np.clip(I, 0, len(la) - 3)
@@ -192,7 +184,7 @@ if __name__ == '__main__':
                     #print(value.max(),value1.max())#,I,J,points[:,0])
                     print(la.shape,lo.shape,data.shape)
                     fault_group.create_dataset(k0,data=value.astype('float16'))
-
+                    
                     #exit()
                     #valueL.append(value.mean(axis=1))
             #valueL = np.stack(valueL,axis=0)
@@ -203,13 +195,13 @@ if __name__ == '__main__':
         file = args.valueFile
         faultFile = args.faultFile
         k0 = args.value
-
+        
         faultFile_value = faultFile.replace('.shp','_value.h5')
-
+        
         plotDir = faultFile.replace('.shp','/')
         if not os.path.exists(plotDir):
             os.makedirs(plotDir)
-
+        
         with File(faultFile_value,'r') as f:
             for k in list(f.keys())[::100]:
                 group = f[k]
@@ -223,7 +215,7 @@ if __name__ == '__main__':
                 plt.colorbar()
                 plt.gca().set_aspect('equal')
                 plt.savefig(f'{plotDir}{k}.jpg',dpi=300)
-
+                
         exit()
     if args.job == 'show_tsne':
         from sklearn.manifold import TSNE
@@ -256,15 +248,15 @@ if __name__ == '__main__':
         tsne = TSNE(n_components=2,random_state=0)
         #tsne = PCA(n_components=2)
         x = tsne.fit_transform(featureL_norm)
-
+        
         plt.close()
         plt.plot(x[:len(featureL_compression),0],x[:len(featureL_compression),1],'.r',ms=3,alpha=0.5,label='c',mec='None')
         plt.plot(x[len(featureL_compression):,0],x[len(featureL_compression):,1],'.b',ms=3,alpha=0.05,label='e',mec='None')
-
+        
         plt.gca().set_aspect('equal')
         plt.legend()
         plt.savefig(f'{plotDir}/tsne.jpg',dpi=600)
-
+        
         plt.close()
         plt.plot(x[:len(featureL_compression),0],x[:len(featureL_compression),1],'.r',ms=3,alpha=0.5,label='c',mec='None')
         plt.plot(x[len(featureL_compression):,0],x[len(featureL_compression):,1],'.b',ms=3,alpha=0.0,label='e',mec='None')
@@ -272,7 +264,7 @@ if __name__ == '__main__':
         plt.gca().set_aspect('equal')
         plt.legend()
         plt.savefig(f'{plotDir}/tsne_c.jpg',dpi=600)
-
+        
         plt.close()
         plt.plot(x[:len(featureL_compression),0],x[:len(featureL_compression),1],'.r',ms=3,alpha=0.0,label='c',mec='None')
         plt.plot(x[len(featureL_compression):,0],x[len(featureL_compression):,1],'.b',ms=3,alpha=0.05,label='e',mec='None')
@@ -308,11 +300,11 @@ if __name__ == '__main__':
             la = f['la'][::4]
             lo = f['lo'][::4]
         corr = np.zeros([data.shape[0],data.shape[0]])
-
+        
         data  =torch.from_numpy(data).float()
         data_norm = (data-data.mean(axis=(1,2),keepdims=True))/(data.std(axis=(1,2),keepdims=True)+1e-4)
         data_norm = data_norm.to('cuda')
-
+        
         for i in range(data.shape[0]):
             for j in range(i,data.shape[0]):
                 data0 = data_norm[i]#.to('cuda')
@@ -330,7 +322,7 @@ if __name__ == '__main__':
         np.savetxt(f'{args.resDir}corr.txt',corr)
     if args.job == 'an_feature_corr':
         corr = np.loadtxt(f'{args.resDir}corr.txt')
-
+        
         PCA = np.linalg.eig(corr)
         threshod = PCA[0].max()*0.005
         plt.close()
@@ -371,7 +363,7 @@ if __name__ == '__main__':
     if args.job in ['show_kmean','show_kmean_o','show_kmean_river']:
         from sklearn.manifold import TSNE
         from sklearn.decomposition import PCA
-
+        
         from scipy import io as sio
         if args.job ==  'show_kmean':
             compressionFile  = 'data/0zero9/tectonics_Compression_value.h5'
@@ -394,14 +386,14 @@ if __name__ == '__main__':
         distanceL_compression = []
         minN = 10
         minDis = 0.2
-
-
-
+        
+        
+        
         if not os.path.exists(plotDir):
             os.makedirs(plotDir)
-
-
-
+            
+            
+            
         from shapefile import Reader
         vnsla = []
         vnslo = []
@@ -414,12 +406,12 @@ if __name__ == '__main__':
                 vnslo.append(np.ones(1)*np.nan)
         vnsla = np.concatenate(vnsla)
         vnslo = np.concatenate(vnslo)
-
+        
         plt.close()
         plt.plot(vnslo,vnsla,'k',lw=0.5)
         plt.gca().set_aspect('equal')
         plt.savefig(f'{plotDir}/vns.jpg',dpi=600)
-
+        
         with File(compressionFile,'r') as f:
             for k in list(f.keys())[::1]:
                 #print(f[k].keys())
@@ -435,12 +427,12 @@ if __name__ == '__main__':
         featureL_compression = np.stack(featureL_compression,axis=0)
         lolaL_compression = np.stack(lolaL_compression,axis=0)
         distanceL_compression = np.stack(distanceL_compression,axis=0)
-
+        
         featureL_extension = []
         lolaL_extension = []
         pointsL_extension = []
         distanceL_extension = []
-
+        
         with File(extensionFile,'r') as f:
             for k in list(f.keys())[::1]:
                 if f[k]['feature'].shape[1]<minN:
@@ -474,8 +466,8 @@ if __name__ == '__main__':
             featureL_little_river = np.stack(featureL_little_river,axis=0)
             lolaL_little_river = np.stack(lolaL_little_river,axis=0)
             distanceL_little_river = np.stack(distanceL_little_river,axis=0)
-
-
+            
+            
             featureL_large_river = []
             lolaL_large_river = []
             pointsL_large_river = []
@@ -491,15 +483,15 @@ if __name__ == '__main__':
                     featureL_large_river.append(f[k]['feature'][:].mean(axis=1))
                     lolaL_large_river.append(f[k]['points'][:].mean(axis=0))
                     pointsL_large_river.append(f[k]['points'][:])
-                    distanceL_large_river.append(distance)
-
+                    distanceL_large_river.append(distance)  
+                    
             featureL_large_river = np.stack(featureL_large_river,axis=0)
             lolaL_large_river = np.stack(lolaL_large_river,axis=0)
             distanceL_large_river = np.stack(distanceL_large_river,axis=0)
-
-
-
-
+            
+            
+            
+        
         if args.job == 'show_kmean_river':
             featureL = np.concatenate([featureL_compression,featureL_extension,featureL_little_river,featureL_large_river],axis=0)
             labelL = np.concatenate([np.zeros([featureL_compression.shape[0]]),np.ones([featureL_extension.shape[0]]),np.ones([featureL_little_river.shape[0]])*2,np.ones([featureL_large_river.shape[0]])*3])
@@ -509,7 +501,7 @@ if __name__ == '__main__':
             pointsL = pointsL_compression+pointsL_extension+pointsL_little_river+pointsL_large_river
             featureL_norm = (featureL)/(featureL.std(axis=0,keepdims=True)+1e-4)
             featureL = featureL_norm/((featureL_norm**2).sum(axis=1,keepdims=True)+1e-4)**0.5
-
+            
         else:
             featureL = np.concatenate([featureL_compression,featureL_extension],axis=0)
             labelL = np.concatenate([np.zeros([featureL_compression.shape[0]]),np.ones([featureL_extension.shape[0]])])
@@ -519,9 +511,9 @@ if __name__ == '__main__':
             pointsL = pointsL_compression+pointsL_extension
             featureL_norm = (featureL)/(featureL.std(axis=0,keepdims=True)+1e-4)
             featureL = featureL_norm/((featureL_norm**2).sum(axis=1,keepdims=True)+1e-4)**0.5
-
+        
         from sklearn.cluster import KMeans
-
+        
         cN = 3
         colorL  = ['r','g','b','c','m','y','k','brown']
         kmeans = KMeans(n_clusters=cN, random_state=0).fit(featureL)
@@ -529,24 +521,24 @@ if __name__ == '__main__':
         shpDir = args.resDir+'shp/'
         if not os.path.exists(shpDir):
             os.makedirs(shpDir)
-
+        
         sf_compression = shapefile.Writer(shpDir+'compression.shp', shapeType=shapefile.POLYLINE)
         sf_extension = shapefile.Writer(shpDir+'extension.shp', shapeType=shapefile.POLYLINE)
-        sf_compression.field('class', "N", size=5)
+        sf_compression.field('class', "N", size=5) 
         sf_extension.field('class', "N", size=5)
         lines_compression = []
         lines_extension = []
         for i in range(len(featureL)):
             line = [[[point[0],point[1]]for point in pointsL[i]]]
             Class = kmeans.labels_[i]
-
+            
             if i<len(pointsL_compression):
                 sf = sf_compression
             else:
                 sf = sf_extension
             sf.line(line)
             sf.record(Class)
-
+        
         sf_compression.close()
         sf_extension.close()
         #tsne = PCA(n_components=2)
@@ -560,11 +552,11 @@ if __name__ == '__main__':
             'feature':featureL,
             'ce_label':labelL,
             'distance':distanceL
-        }
+        } 
         sio.savemat(f'{args.resDir}tsne.mat',dataD)
-
-
-
+        
+        
+        
         tsne = TSNE(n_components=2,random_state=0)
         x = tsne.fit_transform(featureL)
         plt.close()
@@ -573,38 +565,38 @@ if __name__ == '__main__':
         if args.job == 'show_kmean_river':
             plt.plot(x[len(featureL_compression)+len(featureL_extension):len(featureL_compression)+len(featureL_extension)+len(featureL_little_river),0],x[len(featureL_compression)+len(featureL_extension):len(featureL_compression)+len(featureL_extension)+len(featureL_little_river),1],'.r',ms=1,alpha=0.5,label='little river',mec='None')
             plt.plot(x[len(featureL_compression)+len(featureL_extension)+len(featureL_little_river):,0],x[len(featureL_compression)+len(featureL_extension)+len(featureL_little_river):,1],'.g',ms=4,alpha=0.5,label='large river',mec='None')
-
+        
         plt.gca().set_aspect('equal')
         #plt.legend()
         plt.savefig(f'{plotDir}/tsne.jpg',dpi=600)
         plt.close()
-
-        for i in np.unique(kmeans.labels_):
+        
+        for i in np.unique(kmeans.labels_):   
             plt.plot(x[kmeans.labels_==i,0],x[kmeans.labels_==i,1],'.',ms=3,alpha=0.5,label=f'{i}',mec='None',color=colorL[i])
         plt.gca().set_aspect('equal')
         plt.legend()
         plt.savefig(f'{plotDir}/tsne_kmean.jpg',dpi=600)
-
+        
         x = tsne.fit_transform(featureL[:len(featureL_compression)])
         plt.close()
-        for i in np.unique(kmeans.labels_):
+        for i in np.unique(kmeans.labels_):   
             plt.plot(x[kmeans.labels_[:len(featureL_compression)]==i,0],x[kmeans.labels_[:len(featureL_compression)]==i,1],'.',ms=3,alpha=0.5,label=f'{i}',mec='None',color=colorL[i])
         plt.gca().set_aspect('equal')
         plt.legend()
         plt.savefig(f'{plotDir}/tsne_kmean_c.jpg',dpi=600)
-
-
+        
+        
         x = tsne.fit_transform(featureL[len(featureL_compression):])
         plt.close()
-        for i in np.unique(kmeans.labels_):
+        for i in np.unique(kmeans.labels_):   
             plt.plot(x[kmeans.labels_[len(featureL_compression):]==i,0],x[kmeans.labels_[len(featureL_compression):]==i,1],'.',ms=3,alpha=0.5,label=f'{i}',mec='None',color=colorL[i])
         plt.gca().set_aspect('equal')
         plt.legend()
         plt.savefig(f'{plotDir}/tsne_kmean_e.jpg',dpi=600)
-
+                
         plt.close()
         plt.figure(figsize=(15,10))
-        #for i in range(cN):
+        #for i in range(cN):   
         #    #plt.plot(lolaL[kmeans.labels_==i,0],lolaL[kmeans.labels==i,1],'.',ms=1,alpha=0.5,label=f'{i}',mec='None',color=colorL[i])
         for i in range(len(pointsL)):
             plt.plot(pointsL[i][:,0],pointsL[i][:,1],'.',ms=1,alpha=0.5,label=f'{kmeans.labels_[i]}',mec='None',color=colorL[kmeans.labels_[i]])
@@ -617,7 +609,7 @@ if __name__ == '__main__':
         plt.xlim([40,65])
         plt.ylim([-35,-15])
         plt.savefig(f'{plotDir}/kmean_vns.jpg',dpi=600)
-
+        
         plt.close()
         plt.figure(figsize=(15,10))
         for i in range(len(pointsL_compression)):
@@ -627,28 +619,28 @@ if __name__ == '__main__':
         plt.ylim([-90,90])
         plt.plot(vnslo,vnsla,'k',lw=0.5)
         plt.savefig(f'{plotDir}/kmean_c.jpg',dpi=600)
-
+        
         plt.close()
         plt.figure(figsize=(15,10))
         for i in range(len(pointsL_extension)):
-            plt.plot(pointsL_extension[i][:,0],pointsL_extension[i][:,1],'.',ms=1,alpha=0.5,label=f'{kmeans.labels_[i]}',mec='None',color=colorL[kmeans.labels_[i+len(pointsL_compression)]])
+            plt.plot(pointsL_extension[i][:,0],pointsL_extension[i][:,1],'.',ms=1,alpha=0.5,label=f'{kmeans.labels_[i]}',mec='None',color=colorL[kmeans.labels_[i+len(pointsL_compression)]])   
         plt.gca().set_aspect('equal')
         plt.xlim([-180,180])
         plt.ylim([-90,90])
         plt.plot(vnslo,vnsla,'k',lw=0.5)
         plt.savefig(f'{plotDir}/kmean_e.jpg',dpi=600)
         exit()
-
-
-
+        
+        
+        
     if args.job == 'downSamplingO':
         h5File_in = '/H5/all_eqA_296.h5'
         h5File = '/H5/all_eqA_296_predict.h5'
-
+        
         k0 = 'tectonics_Extention'
-        k1 = 'tectonics_Compression'
+        k1 = 'tectonics_Compression'  
         dDegree = 10
-        factor = 16
+        factor = 16 
         size = 2048
         h5File_downsample = f'/H5/all_eqA_296_predict_ds_{factor}.h5'
         #h5File_downsample = '/NAS/jyr/mount/bak/bakdata/data/all_eqA_296_predict_ds.h5'
@@ -658,7 +650,7 @@ if __name__ == '__main__':
         with File(h5File_in,'r') as f:
             laL = f['la'][:]
             loL = f['lo'][:]
-        if True:
+        if True:           
             downsample_h5(h5File,h5File_downsample,k0,factor,'max')
             downsample_h5(h5File,h5File_downsample,k1,factor,'max')
             downsample_h5(h5File,h5File_downsample,'image',factor)
@@ -672,12 +664,12 @@ if __name__ == '__main__':
     if args.job == 'downSampling':
         h5File_in = '/H5/all_eqA_296.h5'
         h5File = '/H5/all_eqA_296_predict.h5'
-
+        
         #h5File_in = '/data/jiangyr/data/all_296.h5'
         #h5File = '/data/jiangyr/data/all_296_predict.h5'
-
+        
         k0 = 'tectonics_Extention'
-        k1 = 'tectonics_Compression'
+        k1 = 'tectonics_Compression'  
         dDegree = 10
         factor = 16
         size = 2048
@@ -689,11 +681,11 @@ if __name__ == '__main__':
         #if False:
         with File(h5File_in,'r') as f:
             laL = f['la'][:]
-            loL = f['lo'][:]
-        if False :
+            loL = f['lo'][:]    
+        if False :    
             downsample_h5(h5File_in,h5File_downsample,k0,factor,dataset_name_out=k0+'_o',dtype='uint8',d0=args.d0,method='max')
             downsample_h5(h5File_in,h5File_downsample,k1,factor,dataset_name_out=k1+'_o',dtype='uint8',d0=args.d0,method='max')
-            #exit()
+            #exit() 
         with File(h5File_downsample,'a') as f:
             if 'la' in f:
                 del f['la']
@@ -704,7 +696,7 @@ if __name__ == '__main__':
             f['la'] = (laL[::factor]/2+laL[::-factor][::-1]/2)[:NLa]#resample(laL,laL.shape[0]//factor)
             f['lo'] = (loL[::factor]/2+loL[::-factor][::-1]/2 )[:NLo]   #resample(loL,loL.shape[0]//factor)
             #laL[::factor]/2+laL[::-factor][::-1]/2
-            #f['lo'] = loL[::factor]/2+loL[::-factor][::-1]/2
+            #f['lo'] = loL[::factor]/2+loL[::-factor][::-1]/2      
             print(f['la'][:])
             print(f['lo'][:])
             #exit()
@@ -714,7 +706,7 @@ if __name__ == '__main__':
         downsample_h5(h5File,h5File_downsample,k0,factor,'max')
         downsample_h5(h5File,h5File_downsample,k1,factor,'max')
         downsample_h5(h5File,h5File_downsample,'image',factor)
-
+        
         #if False:
     if args.job == 'show_all_ds_compare':
         import matplotlib.colors as mcolors
@@ -722,7 +714,7 @@ if __name__ == '__main__':
         h5File = f'/H5/all_eqA_296_predict_ds_{factor}.h5'
         #h5File = f'/H5/all_296_predict_ds_{factor}.h5'
         k0 = 'tectonics_Extention'
-        k1 = 'tectonics_Compression'
+        k1 = 'tectonics_Compression'  
         dDegree = 20
         size = 2048
         pltDir  = args.resDir+'show_all_ds/'
@@ -743,35 +735,35 @@ if __name__ == '__main__':
             image_gray = image*0+image.mean(axis=0,keepdims=True)
             image_gray= 1-(1-image_gray)**2
             #image[:] = image.mean(axis=0,keepdims=True)#*0.5
-            #print(image.shape,image.min(),image.max())
-            #image = 1-(1-image)**2
+            #print(image.shape,image.min(),image.max())  
+            #image = 1-(1-image)**2  
             #exit()
             threshod = 255*args.threshold
             data0[data0<=threshod]=np.nan
             data1[data1<=threshod]=np.nan
             data0_o[data0_o<=threshod]=np.nan
             data1_o[data1_o<=threshod]=np.nan
-
+            
             data0[data0>threshod]=255
             data1[data1>threshod]=255
             data0_o[data0_o>threshod]=255
             data1_o[data1_o>threshod]=255
-
+            
             data0_o_ = data0_o#.copy()
             #data0_o_[::2]=np.nan
-
+            
             data1_o_ = data1_o#.copy()
             #data1_o_[::2]=np.nan
             plt.figure(figsize=(20,10))
-
+            
             plt.gca().pcolormesh(lo[::4],la[::4],image[0,::4,::4]*0-10,rasterized=True,alpha=1,color=image_gray[:,::4,::4].transpose([1,2,0]).reshape([-1,3])).set_zorder(0)
             plt.gca().pcolorfast(lo,la,data0[0][0:,0:],cmap='bwr',vmin=0,vmax=255,rasterized=True,alpha=1)
             plt.gca().pcolorfast(lo,la,data0_o_[0][0:,0:],cmap='bwr_r',vmin=0,vmax=255,rasterized=True,alpha=0.2)
-
+            
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}ext_TW_gray_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
-
+            
             plt.figure(figsize=(20,10))
             plt.gca().pcolormesh(lo[::4],la[::4],image[0,::4,::4]*0-10,rasterized=True,alpha=1,color=image_gray[:,::4,::4].transpose([1,2,0]).reshape([-1,3])).set_zorder(0)
             plt.gca().pcolorfast(lo,la,data1[0][0:,0:],cmap='bwr',vmin=0,vmax=255,rasterized=True,alpha=1)
@@ -779,7 +771,7 @@ if __name__ == '__main__':
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}comp_TW_gray_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
-
+            
             plt.figure(figsize=(20,10))
             plt.gca().pcolormesh(lo[::4],la[::4],image[0,::4,::4]*0-10,rasterized=True,alpha=1,color=image_gray[:,::4,::4].transpose([1,2,0]).reshape([-1,3])).set_zorder(0)
             plt.gca().pcolorfast(lo,la,data0[0][0:,0:],cmap='bwr',vmin=0,vmax=255,rasterized=True,alpha=1)
@@ -787,7 +779,7 @@ if __name__ == '__main__':
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}predict_TW_gray_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
-
+            
             plt.figure(figsize=(20,10))
             plt.gca().pcolormesh(lo[::4],la[::4],image[0,::4,::4]*0-10,rasterized=True,alpha=1,color=image_gray[:,::4,::4].transpose([1,2,0]).reshape([-1,3])).set_zorder(0)
             plt.gca().pcolorfast(lo,la,data0_o[0][0:,0:],cmap='bwr',vmin=0,vmax=255,rasterized=True,alpha=1)
@@ -795,9 +787,9 @@ if __name__ == '__main__':
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}target_TW_gray_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
-
-
-
+            
+            
+            
             plt.figure(figsize=(20,10))
             plt.gca().pcolormesh(lo[::4],la[::4],image[0,::4,::4]*0-10,rasterized=True,alpha=1,color=image[:,::4,::4].transpose([1,2,0]).reshape([-1,3])).set_zorder(0)
             plt.gca().pcolorfast(lo,la,data0[0][0:,0:],cmap='bwr',vmin=0,vmax=255,rasterized=True,alpha=1)
@@ -805,7 +797,7 @@ if __name__ == '__main__':
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}predict_TW_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
-
+            
             plt.figure(figsize=(20,10))
             plt.gca().pcolormesh(lo[::4],la[::4],image[0,::4,::4]*0-10,rasterized=True,alpha=1,color=image[:,::4,::4].transpose([1,2,0]).reshape([-1,3])).set_zorder(0)
             plt.gca().pcolorfast(lo,la,data0_o[0][0:,0:],cmap='bwr',vmin=0,vmax=255,rasterized=True,alpha=1)
@@ -813,8 +805,8 @@ if __name__ == '__main__':
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}target_TW_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
-
-
+            
+            
             plt.figure(figsize=(20,10))
             plt.gca().pcolormesh(lo[::4],la[::4],image_out[0,::4,::4]*0-10,rasterized=True,alpha=1,color=image_out[:,::4,::4].transpose([1,2,0]).reshape([-1,3])).set_zorder(0)
             plt.gca().pcolorfast(lo,la,data0[0][0:,0:],cmap='bwr',vmin=0,vmax=255,rasterized=True,alpha=1)
@@ -822,8 +814,8 @@ if __name__ == '__main__':
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}predict_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
-
-
+            
+            
             plt.figure(figsize=(20,10))
             plt.gca().pcolormesh(lo[::4],la[::4],image_out[0,::4,::4]*0-10,rasterized=True,alpha=1,color=image_out[:,::4,::4].transpose([1,2,0]).reshape([-1,3])).set_zorder(0)
             plt.gca().pcolorfast(lo,la,data0_o[0][0:,0:],cmap='bwr',vmin=0,vmax=255,rasterized=True,alpha=1)
@@ -831,24 +823,24 @@ if __name__ == '__main__':
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}target_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
-
-
+            
+            
             polarIndex = np.abs(la+75).argmin()
             print(polarIndex)
             laL_polar = la[:polarIndex]
             laL_polar_rad = np.deg2rad(90+laL_polar)
             loL_polar = lo[:]
             loL_polar_rad = np.deg2rad(loL_polar)
-
-
-
+            
+            
+            
             x = np.cos(loL_polar_rad).reshape([1,-1])*laL_polar_rad.reshape([-1,1])
             y = np.sin(loL_polar_rad).reshape([1,-1])*laL_polar_rad.reshape([-1,1])
             #ax.pcolormesh(x,y,image[:,:polarIndex].transpose([1,2,0]),rasterized=True,alpha=1,)
             z = image_out[:,-polarIndex:][:,::-1][:,:-1,:-1].transpose([1,2,0])
-            colors_image = z.reshape([-1,3])
+            colors_image = z.reshape([-1,3]) 
             colors_TW = f['image_o'][:,polarIndex:][:,::-1][:,:-1,:-1].transpose([1,2,0]).reshape([-1,3]).astype('float32')/255
-
+            
             plt.figure(figsize=(10,10),dpi=600,)
             fig, ax = plt.subplots()
             ax.pcolormesh(x,y,z,rasterized=True,alpha=1,color=colors_image)
@@ -857,7 +849,7 @@ if __name__ == '__main__':
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}predict_polar_north_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
-
+            
             plt.figure(figsize=(10,10),dpi=600,)
             fig, ax = plt.subplots()
             ax.pcolormesh(x,y,z,rasterized=True,alpha=1,color=colors_TW)
@@ -866,15 +858,15 @@ if __name__ == '__main__':
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}predict_polar_north_TW_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
-
-
+            
+            
             x = np.cos(loL_polar_rad).reshape([1,-1])*laL_polar_rad.reshape([-1,1])
             y = np.sin(loL_polar_rad).reshape([1,-1])*laL_polar_rad.reshape([-1,1])
             plt.figure(figsize=(10,10),dpi=600,)
             z = image_out[:,:polarIndex][:,:-1,:-1].transpose([1,2,0])
-            colors_image = z.reshape([-1,3])
+            colors_image = z.reshape([-1,3])  
             colors_TW = f['image_o'][:,:polarIndex][:,:-1,:-1].transpose([1,2,0]).reshape([-1,3]).astype('float32')/255
-
+            
             fig, ax = plt.subplots()
             #ax.pcolormesh(x,y,image[:,:polarIndex].transpose([1,2,0]),rasterized=True,alpha=1,)
             ax.pcolormesh(x,y,z,rasterized=True,alpha=1,color=colors_image )
@@ -884,26 +876,26 @@ if __name__ == '__main__':
             plt.savefig(f'{pltDir}predict_polar_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
             #exit()
-
+            
             plt.figure(figsize=(10,10),dpi=600,)
             fig, ax = plt.subplots()
             ax.pcolormesh(x,y,z,rasterized=True,alpha=1,color=colors_TW)
             ax.pcolormesh(x,y,data0[:,:polarIndex][0,:-1,:-1],rasterized=True,alpha=1,vmin=0,vmax=255,cmap='bwr')
             ax.pcolormesh(x,y,data1[:,:polarIndex][0,:-1,:-1],rasterized=True,alpha=1,vmin=0,vmax=255,cmap='bwr_r')
-
+            
             plt.gca().set_aspect('equal')
             plt.savefig(f'{pltDir}predict_polar_TW_{args.threshold:.2f}.jpg',dpi=600)
             plt.close()
             exit()
-
+            
     if args.job == 'downSamplingIn':
         h5File = '/H5/all_eqA_296.h5'
         #h5File = '/H5/all_eqA_296_predict.h5'
-
+        
         k0 = 'tectonics_Extention'
-        k1 = 'tectonics_Compression'
+        k1 = 'tectonics_Compression'  
         dDegree = 10
-        factor = 16
+        factor = 16 
         size = 2048
         h5File_downsample = f'/H5/all_eqA_296_ds_{factor}.h5'
         #h5File_downsample = '/NAS/jyr/mount/bak/bakdata/data/all_eqA_296_predict_ds.h5'
@@ -913,7 +905,7 @@ if __name__ == '__main__':
         with File(h5File,'r') as f:
             laL = f['la'][:]
             loL = f['lo'][:]
-        if True:
+        if True:           
             downsample_h5(h5File,h5File_downsample,k0,factor,'max')
             downsample_h5(h5File,h5File_downsample,k1,factor,'max')
             downsample_h5(h5File,h5File_downsample,'image',factor)
@@ -924,12 +916,12 @@ if __name__ == '__main__':
                 del f['lo']
             f['la'] = laL[::factor]/2+laL[::-factor][::-1]/2
             f['lo'] = loL[::factor]/2+loL[::-factor][::-1]/2
-
+            
     if args.job=='toDis' :
         fault2dis(dataFile,'tectonics_Extention.shp',maxDis=0.4,head='Extention')
         fault2dis(dataFile,'tectonics_Compression.shp',maxDis=0.4,head='Compression')
         exit()
-
+    
     #   ['graben', 'flow-like features', 'channel', 'river channel', 'wrinkle-like features', 'aeolian Yardang landform', 'glacial landform', 'chaotic terrain']
     if args.job=='toDis_new' :
         keys = [ 'flow-like features', 'channel', 'river channel', 'wrinkle-like features', 'aeolian Yardang landform', 'glacial landform']
@@ -945,7 +937,7 @@ if __name__ == '__main__':
             plt.savefig('tectonics_Extention_0.95_faults.png')
             plt.show()
             exit()
-
+            
     if args.job=='findP' :
         findPotential(dataFile,d=n)
         exit()
@@ -953,24 +945,18 @@ if __name__ == '__main__':
         showPotential(dataFile)
     if args.job=='checkP' :
         checkPotential(dataFile)
+    
 
-
-    # Ubuntu uses CUDA when available; MPS is retained for compatibility with
-    # the original Mac checkout, and CPU remains a safe fallback.
+    # PATCH: auto-pick device so it runs on Apple Silicon (mps) / CPU, not only CUDA
     if torch.cuda.is_available():
-        if args.gpuIndex >= torch.cuda.device_count():
-            raise SystemExit(
-                f'CUDA device {args.gpuIndex} requested, but only '
-                f'{torch.cuda.device_count()} device(s) are visible.'
-            )
         device = f'cuda:{args.gpuIndex}'
     elif getattr(torch.backends, 'mps', None) and torch.backends.mps.is_available():
         device = 'mps'
     else:
         device = 'cpu'
     print('device =', device)
-
-
+    
+    
     if args.modelType=='mars_sam':
         net = conv_sam(32,dropout=args.dropout,isvit=False,isalign=args.isalign)
     elif args.modelType=='mars_sam_vit':
@@ -979,23 +965,24 @@ if __name__ == '__main__':
         net = conv_sam(32,reRandom=True,dropout=args.dropout,)
     else:
         net =UNet(32,[1,2,2,4,8],[3,4],2,0,8,7,m,n,3,dropout=args.dropout)
-
-    predictFile = args.predictFile or os.path.join(args.resDir, 'predictions.h5')
+        
+    predictFile = f'/data/jiangyr/data/all_eqA_296_predict_{args.modelType}.h5'
+    predictFile = f'/H5/all_eqA_296_predict.h5'
     net.to(device)
-
+    
     step_per_batches = args.stepPerMiniBatch
     if args.modelType in ['mars_sam','mars_sam_vit']:
         opt = torch.optim.AdamW(
         [
             {"params": net.not_sam.parameters(),'lr':args.lr0},
-            {"params": net.in_sam.parameters(),'lr':args.lr0/8},
+            {"params": net.in_sam.parameters(),'lr':args.lr0/8}, 
         ],
             lr=args.lr0
             )
         optSGD = torch.optim.SGD(
         [
             {"params": net.not_sam.parameters(),'lr':args.lr0*10},
-            {"params": net.in_sam.parameters(),'lr':args.lr0},
+            {"params": net.in_sam.parameters(),'lr':args.lr0}, 
         ],
             lr=args.lr0
             )
@@ -1003,7 +990,7 @@ if __name__ == '__main__':
         opt = torch.optim.AdamW(
         [
             {"params": net.parameters(),'lr':args.lr0},
-
+            
         ],
             lr=args.lr0
             )
@@ -1011,7 +998,7 @@ if __name__ == '__main__':
     if args.job=='showModel':
         net.summary()
         exit()
-
+    
     # PATCH: use the spatially-blocked split (no leakage) if key_train.lst /
     # key_val.lst exist next to --dataset; else fall back to the original 90/10.
     _dsdir = os.path.dirname(args.dataset)
@@ -1025,13 +1012,18 @@ if __name__ == '__main__':
     else:
         dataSetTrain = Generator_new(trainFile,keyL_h5[:len(keyL_h5)//10*9]+keyL_h5_added*32,m=m,n=n,training=True)
         dataSetTest = Generator_new(trainFile,keyL_h5[len(keyL_h5)//10*9:],m=m,n=n,training=True)
-
+    
+    if getattr(args, 'fixedVal', False):
+        dataSetTest = Generator_new(trainFile, sorted(dataSetTest.list), m=m, n=n,
+                                    training=False, fixed_crop=True)
     train_loader_train = data_utils.DataLoader(dataSetTrain,
                                         batch_size=BatchSize,
                                         shuffle=True, drop_last=True, num_workers=0,collate_fn=collate_function,)  # PATCH: 0 workers (macOS spawn-safe)
     train_loader_test = data_utils.DataLoader(dataSetTest,
                                         batch_size=BatchSize,
-                                        shuffle=True, drop_last=True, num_workers=0,collate_fn=collate_function)
+                                        shuffle=not getattr(args, 'fixedVal', False),
+                                        drop_last=not getattr(args, 'fixedVal', False),
+                                        num_workers=0,collate_fn=collate_function)
 
     d0 = args.d0
     dw =args.dw
@@ -1047,7 +1039,7 @@ if __name__ == '__main__':
     if args.job=='showSTD':
         for j in range(10):
             image,te,tc,scale=dataSetTest[0]
-            #print(image.std(axis=(0,2,3)))
+            #print(image.std(axis=(0,2,3))) 
             #print(image.mean(axis=(0,2,3)))
             #print('____')
             plt.close()
@@ -1065,6 +1057,8 @@ if __name__ == '__main__':
     if not os.path.exists(plotDir):
         os.makedirs(plotDir)
     if args.job=='train':
+        from aio2_ema import EMATeacher, save_ema_checkpoint, load_ema_checkpoint
+        from training_numerics import require_finite, clip_finite_gradients
         calEnd = torch
         if args.lossFunc =='IoU':
             lossFunc = IoU
@@ -1075,13 +1069,63 @@ if __name__ == '__main__':
         write_config(args)
         lr_mul = 1
         lr_mul0 =1
-
+        
         count_parameters_all, count_parameters_train = count_parameters(net)
         with open(f'{resDir}parameters.txt','a') as f:
             f.write(f'{count_parameters_all} {count_parameters_train}\n')
         opt.zero_grad()
-        for i in range(args.epochs):   # PATCH: configurable (more data needs fewer epochs)
+        teacher = EMATeacher(net, decay=args.emaDecay) if args.emaTeacher else None
+        start_epoch = 0
+        if teacher is not None:
+            if args.emaResume:
+                start_epoch = load_ema_checkpoint(args.emaResume, net, opt, teacher, vars(args))
+            teacher_dir = os.path.join(resDir, 'teacher')
+            os.makedirs(teacher_dir, exist_ok=True)
+            print(f'EMA teacher enabled: decay={teacher.decay}, '
+                  f'updates={teacher.num_updates}, next_epoch={start_epoch + 1}')
+            import json
+            with open(os.path.join(resDir, 'ema_config.json'), 'w') as f:
+                json.dump(vars(args), f, indent=2)
+        online_enabled = getattr(args, 'onlineCorrection', False)
+        fixed_validation_enabled = getattr(args, 'fixedVal', False)
+        best_checkpoints = None
+        if online_enabled or fixed_validation_enabled:
+            from aio2_online import (pseudo_weight, temporary_targets, OnlineDiagnostics,
+                                     fixed_validation, BestCheckpoints, validation_manifest)
+        if fixed_validation_enabled:
+            validation_signature = validation_manifest(train_loader_test, resDir)
+            best_checkpoints = BestCheckpoints(
+                resDir, vars(args), getattr(teacher, 'resume_training_state', None),
+                signature=validation_signature)
+            baseline_student, baseline_teacher = fixed_validation(
+                net, teacher, train_loader_test, device, args, lossFunc, d0, dw, alpha,
+                epoch=start_epoch)
+            best_checkpoints.update(
+                start_epoch, float(np.mean(baseline_student)),
+                float(np.mean(baseline_teacher)) if baseline_teacher else None,
+                net, opt, teacher, baseline=True)
+            print(f'Fixed validation baseline epoch={start_epoch}: '
+                  f'student={np.mean(baseline_student):.6f}, '
+                  f'teacher={np.mean(baseline_teacher) if baseline_teacher else float("nan"):.6f}')
+        fixed_preview = None
+        if getattr(args, 'emaPreview', False):
+            from aio2_preview import FixedPreview, BatchDiagnostics, preserve_rng
+            preview_dir = os.path.join(resDir, 'preview')
+            with preserve_rng():
+                fixed_preview = FixedPreview(
+                    Generator_new, trainFile, dataSetTrain.list, preview_dir, n, m, d0,
+                    args.previewCount, args.previewThreshold, args.previewBuffer, args.previewMinPixels)
+            print(f'Fixed preview enabled: {len(fixed_preview.samples)} training crops; preview candidates are not training labels')
+        for i in range(start_epoch, args.epochs):   # total target epochs, also on resume
             epoch_loss=0
+            online_weight = pseudo_weight(i + 1, args) if online_enabled else 0.
+            online_diagnostics = None
+            if online_enabled and i + 1 >= args.onlineStart:
+                online_diagnostics = OnlineDiagnostics(
+                    i + 1, online_weight, resDir,
+                    capture=((i + 1) % getattr(args, 'previewEvery', 5) == 0 or
+                             i + 1 == args.onlineStart or i + 1 == args.epochs))
+            batch_diagnostics = BatchDiagnostics(args.previewThreshold) if fixed_preview is not None else None
             # PU discount schedule: 0 during warmup, then linear ramp to args.pu.
             # Warmup matters: the model must first learn from the clean signal
             # before unlabeled-but-confident pixels are forgiven.
@@ -1090,7 +1134,7 @@ if __name__ == '__main__':
                 pu_now = args.pu * min(1.0, (i - args.puWarmup + 1) / max(1, args.puRamp))
             net.train()
             net.in_sam.eval()
-
+            
             if i==1:
                 #opt = optSGD
                 #lr_mul0 = 10
@@ -1118,6 +1162,8 @@ if __name__ == '__main__':
                     target = torch.from_numpy(target).to(device)
                     #print(target.shape)
                     #exit()
+                require_finite(image, 'training input', resDir, epoch=i + 1, batch=j)
+                require_finite(target, 'training distances', resDir, epoch=i + 1, batch=j)
                 #if args.isOther:
                 target,others =target[:,:2],target[:,2:]
                 if args.k0Only:
@@ -1128,189 +1174,250 @@ if __name__ == '__main__':
                 else:
                     tMin = target.min(dim=1,keepdim=True).values
                 sw = calEnd.exp(-tMin**2/dw**2)*(1-alpha)+alpha
-
+                
                 if args.isOther:
                     sw_other = (calEnd.exp(-others**2/(dw)**2)*(1-alpha)+alpha)
                     #print(sw_other.amax(),sw_other.shape)
                     sw_other = sw_other.expand_as(sw)
                     sw = torch.where(sw>sw_other,sw,sw_other)
-
+                
                 #print(tMin.dtype)
                 target = calEnd.where(target<d0,1.,0.)
                 valid_01 = image[:,2:4].amin(dim=1,keepdim=True)#.values
                 sw = calEnd.where(valid_01<1e-9,1,sw)
-
+                
                 sw = sw/sw.mean()
-
+                
                 inputs = image
+                training_target, training_sw = target, sw
+                if online_diagnostics is not None:
+                    teacher_probabilities = teacher.predict(inputs)
+                    require_finite(teacher_probabilities, 'teacher training prediction', resDir,
+                                   epoch=i + 1, batch=j)
+                    training_target, training_sw, pseudo_mask, candidate_stats = temporary_targets(
+                        target, sw, teacher_probabilities, inputs, online_weight, args)
                 predict = net(inputs)
-
-
+                require_finite(predict, 'student training prediction', resDir, epoch=i + 1, batch=j)
+                require_finite(training_sw, 'training weights', resDir, epoch=i + 1, batch=j)
                 if args.lossFunc=='FocalTversky':
-                    loss = lossFunc(target,predict,sw=sw,pu=pu_now)
+                    loss = lossFunc(training_target,predict,sw=training_sw,pu=pu_now)
                 else:
-                    loss = lossFunc(target,predict,sw=sw)
+                    loss = lossFunc(training_target,predict,sw=training_sw)
+                require_finite(loss, 'training loss', resDir, epoch=i + 1, batch=j)
+                if online_diagnostics is not None:
+                    online_diagnostics.observe(j, target, pseudo_mask, teacher_probabilities,
+                                               inputs, candidate_stats, loss.item())
+                    del teacher_probabilities, pseudo_mask
                 epoch_loss += loss.item()
-
+                if batch_diagnostics is not None:
+                    batch_diagnostics.observe(j, target, predict, image, loss.item())
+                
                 print(i,len(train_loader_train),j,epoch_loss/(j+1),loss.item())
-
+                
                 loss = loss/step_per_batches
                 loss.backward()
-
+                
                 if j%step_per_batches ==0:
-                    torch.nn.utils.clip_grad_norm_(net.parameters(), 0.1)
+                    clip_finite_gradients(net, 0.1, resDir, epoch=i + 1, batch=j)
                     opt.step()
+                    if teacher is not None:
+                        teacher.update(net)
                     opt.zero_grad()
                     #scheduler.step()
                     pass
                     #print(i,loss.item())
-
+                    
                 #if j==64:
                 #    break
             epoch_loss /= (j+1)
             with torch.no_grad():
                 net.eval()
                 lossL =[]
-                for j, (image,target) in enumerate(train_loader_test):
-                    #te[image<1/512]=999
-                    #tc[image<1/512]=999
-                    if not isinstance(image,torch.Tensor):
-                        image =torch.from_numpy(image).to(device)
-                        target = torch.from_numpy(target).to(device)
-
-                    target,others = target[:,:2],target[:,2:]
-                    if args.k0Only:
-                        target = target[:,:1]
-                    if args.swMode=='single':
-                        tMin = target+0
-                    else:
-                        tMin = target.min(dim=1,keepdim=True).values
-                    sw = calEnd.exp(-tMin**2/dw**2)*(1-alpha)+alpha
-
-                    if args.isOther:
-                        sw_other = (calEnd.exp(-others**2/(dw)**2)*(1-alpha)+alpha)
-                        #print(sw_other.amax(),sw_other.shape)
-                        sw_other = sw_other.expand_as(sw)
-                        sw = torch.where(sw>sw_other,sw,sw_other)
-
-                    target = calEnd.where(target<d0,1.,0.)
-                    valid_01 = image[:,2:4].min(dim=1,keepdim=True).values
-                    sw = calEnd.where(valid_01<1e-9,1,sw)
-                    sw = sw/sw.mean()
-
-
-                    outputs = net(image)
-                    if args.lossFunc=='FocalTversky':
-                        # pu=0 in validation: report the honest, undiscounted loss
-                        loss = lossFunc(target,outputs,sw=sw,pu=0.0).detach().cpu().item()
-                    else:
-                        loss = lossFunc(target,outputs,sw=sw).detach().cpu().item()
-                    lossL.append(loss)
-                    output_image = net.outputImage(image).detach().cpu().numpy()
-                    if args.isalign:
-                        inputs_shift = net.align(image).detach().cpu().numpy()
-                    else:
-                        inputs_shift= image.detach().cpu().numpy()
-                    inputs = image.detach().cpu().numpy()
-                    output = outputs.detach().cpu().numpy()
-                    target = target.cpu().detach().numpy()
-                    sw = sw.cpu().detach().numpy()
-                    sw_other = sw_other.cpu().detach().numpy() if args.isOther else sw
-                    target[target<0.5]=np.nan
-                    #target[target>0.5]=0.5
-                    output[output<0.5]=np.nan
-                    #output[output>0.5]=0.5
-                    #inputs = inputs.cpu().detach().numpy()
-                    if j==0:
-                        for k in range(min(8,BatchSize)):
-
-                            plt.close()
-                            plt.figure(figsize=(10,15))
-                            plt.subplot(3,2,1)
-                            plt.imshow(inputs[k,0],cmap='gray')
-                            plt.imshow(target[k,0],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('Extention target')
-                            plt.gca().set_aspect('equal')
-
-                            plt.subplot(3,2,2)
-                            plt.imshow(inputs[k,1],cmap='gray')
-                            # PATCH: with --k0Only target has a single channel
-                            plt.imshow(target[k,min(1,target.shape[1]-1)],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('Compression target')
-                            plt.gca().set_aspect('equal')
-
-                            plt.subplot(3,2,3)
-                            plt.imshow(np.clip(inputs[k,4:].transpose([1,2,0])/2+0.5,0,1))
-                            plt.imshow(output[k,0],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('Extention predict')
-                            plt.gca().set_aspect('equal')
-                            plt.subplot(3,2,4)
-                            plt.imshow(np.clip(output_image[k].transpose([1,2,0]),0,1))
-                            plt.imshow(output[k,1],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('Compression predict')
-                            plt.tight_layout()
-
-                            plt.subplot(3,2,5)
-                            plt.imshow(sw[k,0],cmap='gray')
-                            #plt.imshow(output[k,2],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('weight other')
-
-                            plt.subplot(3,2,6)
-                            plt.imshow(sw_other[k,0],cmap='gray')
-                            #plt.imshow(output[k,2],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('weight ohter')
-
-                            plt.tight_layout()
-                            plt.savefig(f'{plotDir}{i}_{k}.jpg',dpi=300)
-
-                            plt.close()
-
-                            plt.figure(figsize=(10,15))
-                            plt.subplot(3,2,1)
-                            plt.imshow(inputs_shift[k,0],cmap='gray')
-                            plt.imshow(target[k,0],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('Extention target')
-                            plt.gca().set_aspect('equal')
-
-                            plt.subplot(3,2,2)
-                            plt.imshow(inputs_shift[k,1],cmap='gray')
-                            plt.imshow(target[k,min(1,target.shape[1]-1)],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('Compression target')
-                            plt.gca().set_aspect('equal')
-
-                            plt.subplot(3,2,3)
-                            plt.imshow(np.clip(inputs_shift[k,4:].transpose([1,2,0])/2+0.5,0,1))
-                            plt.imshow(output[k,0],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('Extention predict')
-                            plt.gca().set_aspect('equal')
-
-                            plt.subplot(3,2,4)
-                            plt.imshow(np.clip(output_image[k].transpose([1,2,0]),0,1))
-                            plt.imshow(output[k,1],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('Compression predict')
-
-                            plt.subplot(3,2,5)
-                            plt.imshow(sw[k,0],cmap='gray')
-                            #plt.imshow(output[k,2],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('weight other')
-
-                            plt.subplot(3,2,6)
-                            plt.imshow(sw_other[k,0],cmap='gray')
-                            #plt.imshow(output[k,2],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
-                            plt.title('weight ohter')
-                            plt.tight_layout()
-                            plt.savefig(f'{plotDir}{i}_{k}_shift.jpg',dpi=300)
-                print(i,epoch_loss/(j+1),np.mean(lossL))
+                teacher_lossL = []
+                if fixed_validation_enabled:
+                    lossL, teacher_lossL = fixed_validation(
+                        net, teacher, train_loader_test, device, args, lossFunc, d0, dw, alpha,
+                        epoch=i + 1)
+                else:
+                    for j, (image,target) in enumerate(train_loader_test):
+                        #te[image<1/512]=999
+                        #tc[image<1/512]=999
+                        if not isinstance(image,torch.Tensor):
+                            image =torch.from_numpy(image).to(device)
+                            target = torch.from_numpy(target).to(device)
+                    
+                        target,others = target[:,:2],target[:,2:]
+                        if args.k0Only:
+                            target = target[:,:1]
+                        if args.swMode=='single':
+                            tMin = target+0
+                        else:
+                            tMin = target.min(dim=1,keepdim=True).values
+                        sw = calEnd.exp(-tMin**2/dw**2)*(1-alpha)+alpha
+                    
+                        if args.isOther:
+                            sw_other = (calEnd.exp(-others**2/(dw)**2)*(1-alpha)+alpha)
+                            #print(sw_other.amax(),sw_other.shape)
+                            sw_other = sw_other.expand_as(sw)
+                            sw = torch.where(sw>sw_other,sw,sw_other)
+                        
+                        target = calEnd.where(target<d0,1.,0.)
+                        valid_01 = image[:,2:4].min(dim=1,keepdim=True).values
+                        sw = calEnd.where(valid_01<1e-9,1,sw)
+                        sw = sw/sw.mean()
+                    
+                    
+                        outputs = net(image)
+                        if args.lossFunc=='FocalTversky':
+                            # pu=0 in validation: report the honest, undiscounted loss
+                            loss = lossFunc(target,outputs,sw=sw,pu=0.0).detach().cpu().item()
+                        else:
+                            loss = lossFunc(target,outputs,sw=sw).detach().cpu().item()
+                        lossL.append(loss)
+                        if teacher is not None:
+                            teacher_outputs = teacher.predict(image)
+                            if args.lossFunc == 'FocalTversky':
+                                teacher_loss = lossFunc(target, teacher_outputs, sw=sw, pu=0.0)
+                            else:
+                                teacher_loss = lossFunc(target, teacher_outputs, sw=sw)
+                            teacher_lossL.append(teacher_loss.item())
+                            del teacher_outputs, teacher_loss
+                        output_image = net.outputImage(image).detach().cpu().numpy()
+                        if args.isalign:
+                            inputs_shift = net.align(image).detach().cpu().numpy()
+                        else:
+                            inputs_shift= image.detach().cpu().numpy()
+                        inputs = image.detach().cpu().numpy()
+                        output = outputs.detach().cpu().numpy()
+                        target = target.cpu().detach().numpy()
+                        sw = sw.cpu().detach().numpy()
+                        sw_other = sw_other.cpu().detach().numpy() if args.isOther else sw
+                        target[target<0.5]=np.nan
+                        #target[target>0.5]=0.5
+                        output[output<0.5]=np.nan
+                        #output[output>0.5]=0.5
+                        #inputs = inputs.cpu().detach().numpy()
+                        if j==0:
+                            for k in range(min(8,BatchSize)):
+                            
+                                plt.close()
+                                plt.figure(figsize=(10,15))
+                                plt.subplot(3,2,1)
+                                plt.imshow(inputs[k,0],cmap='gray')
+                                plt.imshow(target[k,0],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('Extention target')
+                                plt.gca().set_aspect('equal')
+                            
+                                plt.subplot(3,2,2)
+                                plt.imshow(inputs[k,1],cmap='gray')
+                                # PATCH: with --k0Only target has a single channel
+                                plt.imshow(target[k,min(1,target.shape[1]-1)],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('Compression target')
+                                plt.gca().set_aspect('equal')
+                            
+                                plt.subplot(3,2,3)
+                                plt.imshow(np.clip(inputs[k,4:].transpose([1,2,0])/2+0.5,0,1))
+                                plt.imshow(output[k,0],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('Extention predict')
+                                plt.gca().set_aspect('equal')
+                                plt.subplot(3,2,4)
+                                plt.imshow(np.clip(output_image[k].transpose([1,2,0]),0,1))
+                                plt.imshow(output[k,1],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('Compression predict')
+                                plt.tight_layout()
+                            
+                                plt.subplot(3,2,5)
+                                plt.imshow(sw[k,0],cmap='gray')
+                                #plt.imshow(output[k,2],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('weight other')
+                            
+                                plt.subplot(3,2,6)
+                                plt.imshow(sw_other[k,0],cmap='gray')
+                                #plt.imshow(output[k,2],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('weight ohter')
+                            
+                                plt.tight_layout()
+                                plt.savefig(f'{plotDir}{i}_{k}.jpg',dpi=300)
+                            
+                                plt.close()
+                            
+                                plt.figure(figsize=(10,15))
+                                plt.subplot(3,2,1)
+                                plt.imshow(inputs_shift[k,0],cmap='gray')
+                                plt.imshow(target[k,0],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('Extention target')
+                                plt.gca().set_aspect('equal')
+                            
+                                plt.subplot(3,2,2)
+                                plt.imshow(inputs_shift[k,1],cmap='gray')
+                                plt.imshow(target[k,min(1,target.shape[1]-1)],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('Compression target')
+                                plt.gca().set_aspect('equal')
+                            
+                                plt.subplot(3,2,3)
+                                plt.imshow(np.clip(inputs_shift[k,4:].transpose([1,2,0])/2+0.5,0,1))
+                                plt.imshow(output[k,0],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('Extention predict')
+                                plt.gca().set_aspect('equal')
+                            
+                                plt.subplot(3,2,4)
+                                plt.imshow(np.clip(output_image[k].transpose([1,2,0]),0,1))
+                                plt.imshow(output[k,1],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('Compression predict')
+                            
+                                plt.subplot(3,2,5)
+                                plt.imshow(sw[k,0],cmap='gray')
+                                #plt.imshow(output[k,2],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('weight other')
+                            
+                                plt.subplot(3,2,6)
+                                plt.imshow(sw_other[k,0],cmap='gray')
+                                #plt.imshow(output[k,2],cmap='bwr',alpha=0.3,vmin=0,vmax=1)
+                                plt.title('weight ohter')
+                                plt.tight_layout()
+                                plt.savefig(f'{plotDir}{i}_{k}_shift.jpg',dpi=300)
+                print(i,epoch_loss,np.mean(lossL))
                 with open(f'{resDir}loss.txt','a') as f:
                     f.write(f'{i} {epoch_loss} {np.mean(lossL)}\n')
+                if best_checkpoints is not None:
+                    best_checkpoints.update(
+                        i + 1, float(np.mean(lossL)),
+                        float(np.mean(teacher_lossL)) if teacher_lossL else None,
+                        net, opt, teacher)
                 torch.save(net.state_dict(), modelFile)
+                if teacher is not None:
+                    teacher_val_loss = float(np.mean(teacher_lossL))
+                    print(f'EMA epoch={i + 1}, updates={teacher.num_updates}, '
+                          f'val_loss={teacher_val_loss:.6f}')
+                    with open(os.path.join(resDir, 'ema_loss.txt'), 'a') as f:
+                        f.write(f'{i} {teacher.num_updates} {teacher_val_loss}\n')
+                    # Existing evaluate.py can read this directory directly.
+                    torch.save(teacher.model.state_dict(), os.path.join(teacher_dir, 'model.pth'))
+                    save_ema_checkpoint(os.path.join(resDir, 'ema_checkpoint.pth'),
+                                        net, opt, teacher, i + 1, vars(args),
+                                        training_state=best_checkpoints.state if best_checkpoints else None)
+                    checkpoint_every = getattr(args, 'checkpointEvery', 20)
+                    if best_checkpoints is not None and checkpoint_every and (i + 1) % checkpoint_every == 0:
+                        stage_dir = os.path.join(resDir, 'checkpoints')
+                        os.makedirs(stage_dir, exist_ok=True)
+                        save_ema_checkpoint(os.path.join(stage_dir, f'epoch_{i + 1:04d}.pth'),
+                                            net, opt, teacher, i + 1, vars(args),
+                                            training_state=best_checkpoints.state)
+                if online_diagnostics is not None:
+                    online_diagnostics.write()
+                if fixed_preview is not None:
+                    batch_diagnostics.write(preview_dir, i + 1)
+                    if (i + 1) % args.previewEvery == 0 or i + 1 == args.epochs:
+                        with preserve_rng():
+                            preview_path = fixed_preview.write(net, teacher, i + 1)
+                        print(f'Fixed preview saved: {preview_path}')
     keyL =['tectonics_Extention','tectonics_Compression']
     if  args.job=='predict_test' :
         from PIL import Image
         calEnd = torch
         net.load_state_dict(torch.load(modelFile,map_location=torch.device('cpu')))
         dataSetTest = Generator_new(trainFile,keyL_h5[len(keyL_h5)//10*9:],m=m,n=n)
-
+    
         train_loader_test = data_utils.DataLoader(dataSetTest,
                                             batch_size=BatchSize,
                                             shuffle=False, drop_last=True, num_workers=0,collate_fn=collate_function)
@@ -1319,26 +1426,26 @@ if __name__ == '__main__':
         if not os.path.exists(plotDir):
             os.makedirs(plotDir)
         for j, (image,target) in enumerate(train_loader_test):
-
+                
             if not isinstance(image,torch.Tensor):
                 image =torch.from_numpy(image).to(device)
                 target = torch.from_numpy(target).to(device)
-
-
+                
+            
             if not isinstance(image,torch.Tensor):
                         image =torch.from_numpy(image).to(device)
                         target = torch.from_numpy(target).to(device)
-
-
+                    
+                    
             tMin = target.min(dim=1,keepdim=True).values
-
-
+            
+            
             target = calEnd.where(target<d0,1.,0.)
-
-
+            
+            
             sw = calEnd.exp(-tMin**2/dw**2)*(1-alpha)+alpha
             sw = sw/sw.mean()
-
+            
             outputs = net.Predict(image)
             output_image = net.outputImage(image).detach().cpu().numpy()
             inputs = image.detach().cpu().numpy()
@@ -1358,9 +1465,9 @@ if __name__ == '__main__':
             output[output<0.5]=np.nan
             #output[output>0.5]=0.5
             #inputs = inputs.cpu().detach().numpy()
-
+            
             for k in range(target.shape[0]):
-
+                
                 if False:
                     print(convertImage[k].shape)
                     image = Image.fromarray(convertImage[k])
@@ -1375,7 +1482,7 @@ if __name__ == '__main__':
                     #plt.colorbar()
                     plt.gca().set_aspect('equal')
                     plt.subplot(2,2,2)
-
+                    
                     plt.imshow(inputs[k,1],cmap='jet',rasterized=True)
                     plt.imshow(target[k,min(1,target.shape[1]-1)],cmap='jet',vmin=0,vmax=1,rasterized=True,alpha=0.4)
                     plt.title('mola target')
@@ -1397,8 +1504,8 @@ if __name__ == '__main__':
                     plt.gca().set_aspect('equal')
                     plt.tight_layout()
                     plt.savefig(f'{plotDir}predict_{j}_{k}.jpg',dpi=300)
-
-
+                
+                
                 plt.close()
                 #plt.figure(figsize=(5,16))
                 plt.figure(figsize=(10,10))
@@ -1435,13 +1542,13 @@ if __name__ == '__main__':
                 plt.imsave(f'{plotDir}{j}_{k}_ctx_shift.jpg',inputs_shift[k,0],cmap='gray')
                 plt.imsave(f'{plotDir}{j}_{k}_mola_shift.jpg',inputs_shift[k,1],cmap='gray')
                 plt.imsave(f'{plotDir}{j}_{k}_tw_shift.jpg',inputs_shift[k,-3:].transpose(1,2,0)/2+0.5)
-
-
-
-
-
-
-
+                
+                
+                
+                
+    
+    
+            
     if args.job == 'predict_all':
         net.load_state_dict(torch.load(modelFile))
         h5File_in = '/H5/all_eqA_296.h5'
@@ -1449,7 +1556,7 @@ if __name__ == '__main__':
         k0 = 'tectonics_Extention'
         k1 = 'tectonics_Compression'
         d_0 = 256
-
+        
         with torch.no_grad():
             net.eval()
             with File(h5File_in,'r') as f:
@@ -1469,10 +1576,10 @@ if __name__ == '__main__':
                         la_rad = np.deg2rad(la)
                         scale = np.abs(np.cos(la_rad))
                         d = int(d_0/scale)
-
+                        
                         if i+d>la_N:
                             break
-
+                        
                         la=laL[i+d//2]
                         la_rad = np.deg2rad(la)
                         scale = np.abs(np.cos(la_rad))
@@ -1484,43 +1591,43 @@ if __name__ == '__main__':
                         for j in range(0,lo_N,d-d//4):
                             print(i/la_N,j,d)
                             j = min(j,lo_N-d)
-
+                            
                             #data0 = f[k0][i:i+d,j:j+d]
                             #data1 = f[k1][i:i+d,j:j+d]
-
+                            
                             #data0 = resize_array_with_zoom(data0,(d_0,d_0))
                             #data1 = resize_array_with_zoom(data1,(d_0,d_0))
                             CTX = f['CTX'][i:i+d,j:j+d].astype(np.float32)
                             mole = f['image'][i:i+d,j:j+d].astype(np.float32)
                             TW = f['TW'][:,i:i+d,j:j+d].astype(np.float32)
-
+                            
                             valid_0 = np.where(CTX>-2147483647,1,0).astype(np.float32)
                             valid_1 = np.where(mole>-2147483647,1,0).astype(np.float32)
-
+                            
                             CTX [CTX <-2147483647]=0#np.nan
                             CTX  = CTX /255
                             CTX  = (CTX -0.5)/0.5
-
+                            
                             TW = TW/255
                             TW = (TW-0.5)/0.5
-
-
+                            
+                            
                             mole[mole<-2147483647]=np.nan
                             imageMean = np.nanmean(mole)
                             mole = (mole-imageMean)/1e8
                             mole= mole/0.25
                             mole[np.isnan(mole)]=0
-
-
-
+                            
+                            
+                            
                             inputs = np.stack([CTX,mole,valid_0,valid_1],axis=0)
-
+                            
                             inputs = np.concatenate([inputs,TW],axis=0)
-
+                            
                             inputsL.append(inputs)
                             jL.append(j)
                         W = np.ones([d,d],'float32')
-                        W[:d//4] = np.where(W[:d//4]<np.linspace(0,1,d//4)[:,np.newaxis],W[:d//4],np.linspace(0,1,d//4)[:,np.newaxis])
+                        W[:d//4] = np.where(W[:d//4]<np.linspace(0,1,d//4)[:,np.newaxis],W[:d//4],np.linspace(0,1,d//4)[:,np.newaxis])  
                         W[-(d//4):] = np.where(W[-(d//4):]<np.linspace(1,0,d//4)[:,np.newaxis],W[-(d//4):],np.linspace(1,0,d//4)[:,np.newaxis])
                         W[:,:d//4] = np.where(W[:,:d//4]<np.linspace(0,1,d//4)[np.newaxis],W[:,:d//4],np.linspace(0,1,d//4)[np.newaxis])
                         W[:,-(d//4):] = np.where(W[:,-(d//4):]<np.linspace(1,0,d//4)[np.newaxis],W[:,-(d//4):],np.linspace(1,0,d//4)[np.newaxis])
@@ -1541,7 +1648,7 @@ if __name__ == '__main__':
                         data1 = resize_array_with_zoom3d(data1,(d,d))
                         images = np.stack([resize_array_with_zoom3d(images[:,k],(d,d)) for k in range(3)],axis=1)
                         d_interval = 1
-
+                        
                         for index,j in enumerate(jL):
                             data0_ = f_out[k0][0,i+d_interval:i-d_interval+d,j+d_interval:j+d-d_interval].astype('float32')
                             data1_ = f_out[k1][0,i+d_interval:i-d_interval+d,j+d_interval:j+d-d_interval].astype('float32')
@@ -1572,7 +1679,7 @@ if __name__ == '__main__':
         d_0 = 256
         keydim = 256#256#32
         downsample=8#16
-
+        
         with torch.no_grad():
             net.eval()
             with File(h5File_in,'r') as f:
@@ -1590,14 +1697,14 @@ if __name__ == '__main__':
                     f_out.create_dataset('fill',[dim1,dim2],'float16',fillvalue=0)
                     f_out.create_dataset('la',data=laL_downsample)
                     f_out.create_dataset('lo',data=loL_downsample)
-
-
-
-
+                    
+                    
+                        
+                    
                     CTX_min_la = 3.5
                     polar_degree = 9
                     polar_degree_max = 2**0.5*polar_degree
-
+                    
                     i0_degree = np.abs(laL+90-polar_degree).argmin()
                     i0_degree_max = np.abs(laL+90-polar_degree_max).argmin()
                     i0_degree_CTX = np.abs(laL+90-CTX_min_la).argmin()
@@ -1609,10 +1716,10 @@ if __name__ == '__main__':
                         la_rad = np.deg2rad(la)
                         scale = np.abs(np.cos(la_rad))
                         d = int(d_0/scale)
-
+                        
                         if i+d>la_N:
                             break
-
+                        
                         la=laL[i+d//2]
                         la_rad = np.deg2rad(la)
                         scale = np.abs(np.cos(la_rad))
@@ -1624,67 +1731,67 @@ if __name__ == '__main__':
                         for j in range(0,lo_N,d-d//4):
                             print(i/la_N,j,d)
                             j = min(j,lo_N-d)
-
-
+                            
+                            
                             CTX = f['CTX'][i:i+d,j:j+d].astype(np.float32)
                             mole = f['image'][i:i+d,j:j+d].astype(np.float32)
                             TW = f['TW'][:,i:i+d,j:j+d].astype(np.float32)
-
+                            
                             valid_0 = np.where(CTX>-2147483647,1,0).astype(np.float32)
                             valid_1 = np.where(mole>-2147483647,1,0).astype(np.float32)
-
+                            
                             CTX [CTX <-2147483647]=0#np.nan
                             CTX  = CTX /255
                             CTX  = (CTX -0.5)/0.5
-
+                            
                             TW = TW/255
                             TW = (TW-0.5)/0.5
-
-
+                            
+                            
                             mole[mole<-2147483647]=np.nan
                             imageMean = np.nanmean(mole)
                             mole = (mole-imageMean)/1e8
                             mole= mole/0.25
                             mole[np.isnan(mole)]=0
-
-
-
+                            
+                            
+                            
                             inputs = np.stack([CTX,mole,valid_0,valid_1],axis=0)
-
+                            
                             inputs = np.concatenate([inputs,TW],axis=0)
-
+                            
                             inputsL.append(inputs)
                             jL.append(j)
-
-
+                        
+                        
                         W = np.ones([d//downsample,d//downsample],'float32')
                         W[:d//downsample//4] = np.where(W[:d//downsample//4]<np.linspace(0,1,d//downsample//4)[:,np.newaxis],W[:d//downsample//4],np.linspace(0,1,d//downsample//4)[:,np.newaxis])
                         W[-(d//downsample//4):] = np.where(W[-(d//downsample//4):]<np.linspace(1,0,d//downsample//4)[:,np.newaxis],W[-(d//downsample//4):],np.linspace(1,0,d//downsample//4)[:,np.newaxis])
                         W[:,:d//downsample//4] = np.where(W[:,:d//downsample//4]<np.linspace(0,1,d//downsample//4)[np.newaxis],W[:,:d//downsample//4],np.linspace(0,1,d//downsample//4)[np.newaxis])
                         W[:,-(d//downsample//4):] = np.where(W[:,-(d//downsample//4):]<np.linspace(1,0,d//downsample//4)[np.newaxis],W[:,-(d//downsample//4):],np.linspace(1,0,d//downsample//4)[np.newaxis])
-
+                        
                         inputs = np.stack(inputsL,axis=0)
                         inputs = np.stack([resize_array_with_zoom3d(inputs[:,k],(d_0,d_0)) for k in range(inputs.shape[1])],axis=1)
                         #inputs = torch.from_numpy(inputs).to(device)
                         feature = net.outputFeature(inputs,d_0//downsample,d_0//downsample,d//downsample,d//downsample,D=d_0,batch_size=16)
-
-
+                        
+                        
                         for index,j in enumerate(jL):
-
+                            
                             data0_ = f_out[k0][:,i//downsample:i//downsample+d//downsample,j//downsample:j//downsample+d//downsample].astype('float32')
                             fill = f_out['fill'][i//downsample:i//downsample+d//downsample,j//downsample:j//downsample+d//downsample].astype('float32')
-
+                            
 
                             w = fill
                             w = w.reshape([1,*w.shape])
                             data0_ = w*data0_+(1-w)*feature[index]
                             f_out[k0][:,i//downsample:i//downsample+d//downsample,j//downsample:j//downsample+d//downsample] = data0_
-
+                            
                             f_out['fill'][i//downsample:i//downsample+d//downsample,j//downsample:j//downsample+d//downsample] = W
-
+                            
                         i += d-d//4
-
-
+    
+        
     if args.job == 'predict_all_new':
         #print(device)
         from scipy import interpolate
@@ -1699,10 +1806,10 @@ if __name__ == '__main__':
         k0 = 'tectonics_Extention'
         k1 = 'tectonics_Compression'
         d_0 = 256
-
+        
         with torch.no_grad():
             net.eval()
-
+            
             with File(h5File_in,'r') as f:
                 with File(h5File_out,'a') as f_out:
                     if k0 not in f_out:
@@ -1718,7 +1825,7 @@ if __name__ == '__main__':
                     CTX_min_la = 3.5
                     polar_degree = 9
                     polar_degree_max = 2**0.5*polar_degree
-
+                    
                     i0_degree = np.abs(laL+90-polar_degree).argmin()
                     i0_degree_max = np.abs(laL+90-polar_degree_max).argmin()
                     i0_degree_CTX = np.abs(laL+90-CTX_min_la).argmin()
@@ -1731,78 +1838,78 @@ if __name__ == '__main__':
                         loL_degree = loL
                         laL_degree_max = laL[:i0_degree_max]
                         loL_degree_max = loL
-
+                        
                         CTX = f['CTX'][:i0_degree_max].astype(np.float32)
                         mole = f['image'][:i0_degree_max].astype(np.float32)
                         TW = f['TW'][:,:i0_degree_max].astype(np.float32)
-
+                        
                         #mole[:i0_degree_CTX] = -2147483647-1
-
+                        
                         valid_0 = np.where(CTX>-2147483647,1,0).astype(np.float32)
                         valid_1 = np.where(mole>-2147483647,1,0).astype(np.float32)
                         valid_1[:i0_degree_CTX] = 0
                         valid_1 = valid_1*0
                         mole = mole*0
-
+                        
                         CTX [CTX <-2147483647]=0#np.nan
                         CTX  = CTX /255
                         CTX  = (CTX -0.5)/0.5
-
+                        
                         TW = TW/255
                         TW = (TW-0.5)/0.5
-
-
+                        
+                        
                         mole[mole<-2147483647]=np.nan
                         imageMean = np.nanmean(mole)
                         mole = (mole-imageMean)/1e8
                         mole= mole/0.25
                         mole[np.isnan(mole)]=0
-
+                        
                         inputs = np.stack([CTX,mole,valid_0,valid_1],axis=0)
                         inputs = np.concatenate([inputs,TW],axis=0)
-
+                        
                         #np.stack([resize_array_with_zoom3d(images[:,k],(d_0,d)) for k in range(3)],axis=1)
-
-
+                        
+                        
                         loL_rad = np.deg2rad(loL_degree)
                         laL_rad = np.deg2rad(90+laL_degree)
-
+                        
                         laL_rad_max = np.deg2rad(90+laL_degree_max)
                         loL_rad_max = np.deg2rad(loL_degree_max)
-
-                        x_plane = np.concatenate([-laL_rad[::-1],laL_rad])
+                        
+                        x_plane = np.concatenate([-laL_rad[::-1],laL_rad])   
                         y_plane = x_plane+0
-
+                        
                         x_grid = x_plane.reshape([1,-1])+y_plane.reshape([-1,1])*0
                         y_grid = x_plane.reshape([1,-1])*0+y_plane.reshape([-1,1])
-
+                        
                         laL_rad_max_grid = laL_rad_max.reshape([-1,1])+loL_rad_max.reshape([1,-1])*0
                         loL_rad_max_grid = laL_rad_max.reshape([-1,1])*0+loL_rad_max.reshape([1,-1])
-
+                        
                         N0,M0 = laL_rad_max_grid.shape
                         N1 = N0
                         M1 = N1*4
                         scale = (N1/N0,M1/M0)
-
+                        
                         laL_rad_max_grid = zoom(laL_rad_max_grid,scale,order=3)
                         loL_rad_max_grid= zoom(loL_rad_max_grid,scale,order=3)
                         inputs = np.stack([zoom(inputs[k],scale,order=3) for k in range(inputs.shape[0])],axis=0)
-
+                        
                         inputs[:,2]= np.where(inputs[:,2]>0.8,1,0)
                         inputs[:,3]= np.where(inputs[:,3]>0.8,1,0)
-
+                        
                         x_rad_max_grid = laL_rad_max_grid*np.cos(loL_rad_max_grid)
                         y_rad_max_grid = laL_rad_max_grid*np.sin(loL_rad_max_grid)
-
+                        
                         laL_rad_grid = laL_rad.reshape([-1,1])+loL_rad.reshape([1,-1])*0
                         loL_rad_grid = laL_rad.reshape([-1,1])*0+loL_rad.reshape([1,-1])
                         x_rad_grid = laL_rad_grid*np.cos(loL_rad_grid)
                         y_rad_grid = laL_rad_grid*np.sin(loL_rad_grid)
-
+                        
                         #inputs = inputs.reshape([inputs.shape[0],-1]).transpose([1,0])
-
+                        
                         #laL_grid_rad,loL_grid_rad =np.xy2polar(x_rad_grid,y_rad_grid)
-
+                        
                         laL_grid_rad = np.sqrt(x_rad_grid**2+y_rad_grid**2)
                         loL_grid_rad = np.arctan2(y_rad_grid, x_rad_grid)
                         #np.x
@@ -1813,30 +1920,30 @@ if __name__ == '__main__':
                         #print(inputs.shape,x_rad_max_grid.reshape([-1]).shape,y_rad_max_grid.reshape([-1]).shape)
                         #print(x_rad_max_grid,y_rad_max_grid)
                         #print(x_grid,y_grid)
-
-
+                        
+                        
                         #inputs = inputs.res
-
+                        
                         #if False:
                         inputs = np.stack([interpolate.griddata(
                                 (x_rad_max_grid.reshape([-1]),y_rad_max_grid.reshape([-1])),
                                 inputs[k].reshape([-1]),
                                 (x_grid,y_grid),method='nearest') for k in range(inputs.shape[0])],axis=0)
-
+                        
                         plt.figure(figsize=(6,6))
                         ac = plt.gca()
                         ac.pcolorfast(inputs[1,:,:])
                         plt.savefig('test_south.jpg',dpi=300)
                         plt.close()
-
+                        
                         outputs = net.predict_total(inputs)
-
+                        
                         plt.figure(figsize=(6,6))
                         ac = plt.gca()
                         ac.pcolorfast(outputs[1,:,:],vmin=0,vmax=1,cmap='bwr')
                         plt.savefig('test_south_out_ori.jpg',dpi=300)
                         plt.close()
-
+                        
                         #outputs = interpolate.interpn((x_plane,y_plane),outputs.transpose([1,2,0]),x_rad_grid,y_rad_grid,method='linear').transpose([2,0,1])
                         #if False:
                         images = net.predict_total_image(inputs)
@@ -1846,61 +1953,61 @@ if __name__ == '__main__':
                         ac.imshow(images[:,:].transpose([1,2,0]))
                         plt.savefig('test_south_out_ori_image.jpg',dpi=300)
                         plt.close()
-
+                        
                         if 'south_'+k0 in f_out:
                             del f_out['south_'+k0]
                             del f_out['south_'+k1]
                             del f_out['south_image']
                             del f_out['south_la']
                             del f_out['south_lo']
-
+                        
                         f_out['south_'+k0] = (outputs[0,]*255).astype('uint8')
                         f_out['south_'+k1] = (outputs[1,]*255).astype('uint8')
                         f_out['south_image'] = (images[0,]*255).astype('uint8')
                         f_out['south_la'] = laL_grid_rad
                         f_out['south_lo'] = loL_grid_rad
-
+                        
                         outputs = np.stack([
                             interpolate.griddata((x_grid.reshape([-1]),y_grid.reshape([-1])),outputs[k].reshape([-1]),(x_rad_grid,y_rad_grid),method='nearest')
                             for k in range(outputs.shape[0])],axis=0)
-
+                        
                         images = np.stack([
                             interpolate.griddata((x_grid.reshape([-1]),y_grid.reshape([-1])),images[k].reshape([-1]),(x_rad_grid,y_rad_grid),method='nearest')
                             for k in range(images.shape[0])],axis=0)
-
-
-
+                        
+                        
+                        
                         plt.figure(figsize=(6,6))
                         ac = plt.gca()
                         ac.pcolorfast(outputs[1,:,:],vmin=0,vmax=1,cmap='bwr')
                         plt.savefig('test_south_out.jpg',dpi=300)
                         plt.close()
-
+                        
                         plt.figure(figsize=(6,6))
                         ac = plt.gca()
                         ac.imshow(images[:,:].transpose([1,2,0]),aspect='auto')
                         plt.savefig('test_south_out_image.jpg',dpi=300)
                         plt.close()
-
+                        
                         f_out[k0][0,:i0_degree,:] = (outputs[0,:i0_degree,:]*255).astype('uint8')
                         f_out[k1][0,:i0_degree,:] = (outputs[1,:i0_degree,:]*255).astype('uint8')
                         f_out['image'][:,:i0_degree,:] = (images[:,:i0_degree,:]*255).astype('uint8')
-
+                    
                     if True:
                         laL_degree = laL[-i0_degree:]
                         loL_degree = loL
                         laL_degree_max = laL[-i0_degree_max:]
                         loL_degree_max = loL
-
+                        
                         CTX = f['CTX'][-i0_degree_max:].astype(np.float32)
                         mole = f['image'][-i0_degree_max:].astype(np.float32)
                         TW = f['TW'][:,-i0_degree_max:].astype(np.float32)
                         #mole[-i0_degree_CTX:] = -2147483647-1
-
+                        
                         if False:
                             print(mole.shape)
                             #exit()
-
+                            
                             #print(fL,fL.max(),fL.min())
                             #exit()
                             moleNew = mole[:,::10]
@@ -1913,12 +2020,12 @@ if __name__ == '__main__':
                             spec = fft.fft(moleNew,axis=1)
                             plt.figure(figsize=(6,6))
                             ac = plt.gca()
-
+                            
                             N = moleNew.shape[1]
                             fL = fL[:N//2]
                             spec = spec[:,:N//2]
-
-
+                            
+                            
                             #fL = fL[:-1]/2+fL[1:]/2
                             ac.pcolorfast(fL,90-laL_degree_max,np.log(np.abs(spec))[:-1,:-1],cmap='jet',vmin=-3,vmax=3)
                             #plt.gca().set_yscale('log')
@@ -1926,73 +2033,73 @@ if __name__ == '__main__':
                             #plt.colorbar()
                             plt.savefig('test_north_fft.jpg',dpi=300)
                             exit()
-
+                        
                         valid_0 = np.where(CTX>-2147483647,1,0).astype(np.float32)
                         valid_1 = np.where(mole>-2147483647,1,0).astype(np.float32)
                         valid_1[-i0_degree_CTX:] = 0
-
+                        
                         valid_1 = valid_1*0
                         mole = mole*0
-
+                        
                         CTX [CTX <-2147483647]=0#np.nan
                         CTX  = CTX /255
                         CTX  = (CTX -0.5)/0.5
-
+                        
                         TW = TW/255
                         TW = (TW-0.5)/0.5
-
-
+                        
+                        
                         mole[mole<-2147483647]=np.nan
                         imageMean = np.nanmean(mole)
                         mole = (mole-imageMean)/1e8
                         mole= mole/0.25
                         mole[np.isnan(mole)]=0
-
+                        
                         inputs = np.stack([CTX,mole,valid_0,valid_1],axis=0)
                         inputs = np.concatenate([inputs,TW],axis=0)
-
+                        
                         #np.stack([resize_array_with_zoom3d(images[:,k],(d_0,d)) for k in range(3)],axis=1)
-
-
+                        
+                        
                         loL_rad = np.deg2rad(loL_degree)
                         laL_rad = np.deg2rad(90-laL_degree)
-
+                        
                         laL_rad_max = np.deg2rad(90-laL_degree_max)
                         loL_rad_max = np.deg2rad(loL_degree_max)
-
-                        x_plane = np.concatenate([-laL_rad,laL_rad[::-1]])
+                        
+                        x_plane = np.concatenate([-laL_rad,laL_rad[::-1]])   
                         y_plane = x_plane+0
-
+                        
                         x_grid = x_plane.reshape([1,-1])+y_plane.reshape([-1,1])*0
                         y_grid = x_plane.reshape([1,-1])*0+y_plane.reshape([-1,1])
-
+                        
                         laL_rad_max_grid = laL_rad_max.reshape([-1,1])+loL_rad_max.reshape([1,-1])*0
                         loL_rad_max_grid = laL_rad_max.reshape([-1,1])*0+loL_rad_max.reshape([1,-1])
-
+                        
                         N0,M0 = laL_rad_max_grid.shape
                         N1 = N0
                         M1 = N1*4
                         scale = (N1/N0,M1/M0)
-
+                        
                         laL_rad_max_grid = zoom(laL_rad_max_grid,scale,order=3)
                         loL_rad_max_grid= zoom(loL_rad_max_grid,scale,order=3)
-
+                        
                         inputs = np.stack([zoom(inputs[k],scale,order=3) for k in range(inputs.shape[0])],axis=0)
                         inputs[:,2]= np.where(inputs[:,2]>0.8,1,0)
                         inputs[:,3]= np.where(inputs[:,3]>0.8,1,0)
-
+                        
                         x_rad_max_grid = laL_rad_max_grid*np.cos(loL_rad_max_grid)
                         y_rad_max_grid = laL_rad_max_grid*np.sin(loL_rad_max_grid)
-
+                        
                         laL_rad_grid = laL_rad.reshape([-1,1])+loL_rad.reshape([1,-1])*0
                         loL_rad_grid = laL_rad.reshape([-1,1])*0+loL_rad.reshape([1,-1])
                         x_rad_grid = laL_rad_grid*np.cos(loL_rad_grid)
                         y_rad_grid = laL_rad_grid*np.sin(loL_rad_grid)
-
+                        
                         #inputs = inputs.reshape([inputs.shape[0],-1]).transpose([1,0])
-
+                        
                         #laL_grid_rad,loL_grid_rad =np.xy2polar(x_rad_grid,y_rad_grid)
-
+                        
                         laL_grid_rad = np.sqrt(x_rad_grid**2+y_rad_grid**2)
                         loL_grid_rad = np.arctan2(y_rad_grid, x_rad_grid)
                         #np.x
@@ -2003,30 +2110,30 @@ if __name__ == '__main__':
                         #print(inputs.shape,x_rad_max_grid.reshape([-1]).shape,y_rad_max_grid.reshape([-1]).shape)
                         #print(x_rad_max_grid,y_rad_max_grid)
                         #print(x_grid,y_grid)
-
-
+                        
+                        
                         #inputs = inputs.res
-
+                        
                         #if False:
                         inputs = np.stack([interpolate.griddata(
                                 (x_rad_max_grid.reshape([-1]),y_rad_max_grid.reshape([-1])),
                                 inputs[k].reshape([-1]),
                                 (x_grid,y_grid),method='nearest') for k in range(inputs.shape[0])],axis=0)
-
+                        
                         plt.figure(figsize=(6,6))
                         ac = plt.gca()
                         ac.pcolorfast(inputs[1,:,:])
                         plt.savefig('test_north.jpg',dpi=300)
                         plt.close()
-
+                        
                         outputs = net.predict_total(inputs)
-
+                        
                         plt.figure(figsize=(6,6))
                         ac = plt.gca()
                         ac.pcolorfast(outputs[1,:,:],vmin=0,vmax=1,cmap='bwr')
                         plt.savefig('test_north_out_ori.jpg',dpi=300)
                         plt.close()
-
+                        
                         #outputs = interpolate.interpn((x_plane,y_plane),outputs.transpose([1,2,0]),x_rad_grid,y_rad_grid,method='linear').transpose([2,0,1])
                         #if False:
                         images = net.predict_total_image(inputs)
@@ -2036,63 +2143,63 @@ if __name__ == '__main__':
                         ac.imshow(images[:,:].transpose([1,2,0]))
                         plt.savefig('test_north_out_ori_image.jpg',dpi=300)
                         plt.close()
-
-
+                        
+                        
                         if 'north_'+k0 in f_out:
                             del f_out['north_'+k0]
                             del f_out['north_'+k1]
                             del f_out['north_image']
                             del f_out['north_la']
                             del f_out['north_lo']
-
+                        
                         f_out['north_'+k0] = (outputs[0,]*255).astype('uint8')
                         f_out['north_'+k1] = (outputs[1,]*255).astype('uint8')
                         f_out['north_image'] = (images[0,]*255).astype('uint8')
                         f_out['north_la'] = laL_grid_rad
                         f_out['north_lo'] = loL_grid_rad
-
-
-
+                        
+                        
+                        
                         outputs = np.stack([
                             interpolate.griddata((x_grid.reshape([-1]),y_grid.reshape([-1])),outputs[k].reshape([-1]),(x_rad_grid,y_rad_grid),method='nearest')
                             for k in range(outputs.shape[0])],axis=0)
-
+                        
                         images = np.stack([
                             interpolate.griddata((x_grid.reshape([-1]),y_grid.reshape([-1])),images[k].reshape([-1]),(x_rad_grid,y_rad_grid),method='nearest')
                             for k in range(images.shape[0])],axis=0)
-
-
-
+                        
+                        
+                        
                         plt.figure(figsize=(6,6))
                         ac = plt.gca()
                         ac.pcolorfast(outputs[1,:,:],vmin=0,vmax=1,cmap='bwr')
                         plt.savefig('test_north_out.jpg',dpi=300)
                         plt.close()
-
+                        
                         plt.figure(figsize=(6,6))
                         ac = plt.gca()
                         ac.imshow(images[:,:].transpose([1,2,0]),aspect='auto')
                         plt.savefig('test_north_out_image.jpg',dpi=300)
                         plt.close()
-
+                        
                         f_out[k0][0,-i0_degree:,:] = (outputs[0,:i0_degree,:]*255).astype('uint8')
                         f_out[k1][0,-i0_degree:,:] = (outputs[1,:i0_degree,:]*255).astype('uint8')
                         f_out['image'][:,-i0_degree:,:] =(images[:,:i0_degree,:]*255).astype('uint8')
                         #exit()
-
+                    
                     exit()
-
-
+                    
+                    
                     i = np.abs(laL+85).argmin()
                     for _ in range(10000000):
                         la = laL[i]
                         la_rad = np.deg2rad(la)
                         scale = np.abs(np.cos(la_rad))
                         d = int(d_0/scale)
-
+                        
                         if i+d>la_N:
                             break
-
+                        
                         la=laL[i+d_0//2]
                         la_rad = np.deg2rad(la)
                         scale = np.abs(np.cos(la_rad))
@@ -2104,43 +2211,43 @@ if __name__ == '__main__':
                         for j in range(0,lo_N,d-d//4):
                             print(i/la_N,j,d)
                             j = min(j,lo_N-d)
-
+                            
                             #data0 = f[k0][i:i+d,j:j+d]
                             #data1 = f[k1][i:i+d,j:j+d]
-
+                            
                             #data0 = resize_array_with_zoom(data0,(d_0,d_0))
                             #data1 = resize_array_with_zoom(data1,(d_0,d_0))
                             CTX = f['CTX'][i:i+d_0,j:j+d].astype(np.float32)
                             mole = f['image'][i:i+d_0,j:j+d].astype(np.float32)
                             TW = f['TW'][:,i:i+d_0,j:j+d].astype(np.float32)
-
+                            
                             valid_0 = np.where(CTX>-2147483647,1,0).astype(np.float32)
                             valid_1 = np.where(mole>-2147483647,1,0).astype(np.float32)
-
+                            
                             CTX [CTX <-2147483647]=0#np.nan
                             CTX  = CTX /255
                             CTX  = (CTX -0.5)/0.5
-
+                            
                             TW = TW/255
                             TW = (TW-0.5)/0.5
-
-
+                            
+                            
                             mole[mole<-2147483647]=np.nan
                             imageMean = np.nanmean(mole)
                             mole = (mole-imageMean)/1e8
                             mole= mole/0.25
                             mole[np.isnan(mole)]=0
-
-
-
+                            
+                            
+                            
                             inputs = np.stack([CTX,mole,valid_0,valid_1],axis=0)
-
+                            
                             inputs = np.concatenate([inputs,TW],axis=0)
-
+                            
                             inputsL.append(inputs)
                             jL.append(j)
                         W = np.ones([d_0,d],'float32')
-                        W[:d_0//4] = np.where(W[:d_0//4]<np.linspace(0,1,d_0//4)[:,np.newaxis],W[:d_0//4],np.linspace(0,1,d_0//4)[:,np.newaxis])
+                        W[:d_0//4] = np.where(W[:d_0//4]<np.linspace(0,1,d_0//4)[:,np.newaxis],W[:d_0//4],np.linspace(0,1,d_0//4)[:,np.newaxis])  
                         W[-(d_0//4):] = np.where(W[-(d_0//4):]<np.linspace(1,0,d_0//4)[:,np.newaxis],W[-(d_0//4):],np.linspace(1,0,d_0//4)[:,np.newaxis])
                         W[:,:d//4] = np.where(W[:,:d//4]<np.linspace(0,1,d//4)[np.newaxis],W[:,:d//4],np.linspace(0,1,d//4)[np.newaxis])
                         W[:,-(d//4):] = np.where(W[:,-(d//4):]<np.linspace(1,0,d//4)[np.newaxis],W[:,-(d//4):],np.linspace(1,0,d//4)[np.newaxis])
@@ -2158,7 +2265,7 @@ if __name__ == '__main__':
                         data1 = resize_array_with_zoom3d(data1,(d_0,d))
                         images = np.stack([resize_array_with_zoom3d(images[:,k],(d_0,d)) for k in range(3)],axis=1)
                         d_interval = 1
-
+                        
                         for index,j in enumerate(jL):
                             data0_ = f_out[k0][0,i+d_interval:i-d_interval+d_0,j+d_interval:j+d-d_interval].astype('float32')
                             data1_ = f_out[k1][0,i+d_interval:i-d_interval+d_0,j+d_interval:j+d-d_interval].astype('float32')
@@ -2200,7 +2307,7 @@ if __name__ == '__main__':
         downsample=8
         with torch.no_grad():
             net.eval()
-
+            
             with File(h5File_in,'r') as f:
                 dim1 = f['CTX'].shape[0]//downsample
                 dim2 = f['CTX'].shape[1]//downsample
@@ -2212,19 +2319,19 @@ if __name__ == '__main__':
                 laL_downsample = laL[::downsample]/2+laL[::-downsample][::-1]/2
                 loL_downsample = loL[::downsample]/2+loL[::-downsample][::-1]/2
                 with File(h5File_out,'a') as f_out:
-
+                    
                     f_out.create_dataset(k0,[keydim,dim1,dim2],'float16',fillvalue=0)
                     f_out.create_dataset('fill',[dim1,dim2],'float16',fillvalue=0)
                     f_out.create_dataset('la',data=laL_downsample)
                     f_out.create_dataset('lo',data=loL_downsample)
-
-
-
-
+                    
+                    
+                        
+                    
                     CTX_min_la = 3.5
                     polar_degree = 9
                     polar_degree_max = 2**0.5*polar_degree
-
+                    
                     i0_degree = np.abs(laL+90-polar_degree).argmin()
                     i0_degree_max = np.abs(laL+90-polar_degree_max).argmin()
                     i0_degree_CTX = np.abs(laL+90-CTX_min_la).argmin()
@@ -2234,10 +2341,10 @@ if __name__ == '__main__':
                         la_rad = np.deg2rad(la)
                         scale = np.abs(np.cos(la_rad))
                         d = int(d_0/scale)
-
+                        
                         if i+d>la_N:
                             break
-
+                        
                         la=laL[i+d_0//2]
                         la_rad = np.deg2rad(la)
                         scale = np.abs(np.cos(la_rad))
@@ -2249,35 +2356,35 @@ if __name__ == '__main__':
                         for j in range(0,lo_N,d-d//4):
                             print(i/la_N,j,d)
                             j = min(j,lo_N-d)
-
-
+                            
+                            
                             CTX = f['CTX'][i:i+d_0,j:j+d].astype(np.float32)
                             mole = f['image'][i:i+d_0,j:j+d].astype(np.float32)
                             TW = f['TW'][:,i:i+d_0,j:j+d].astype(np.float32)
-
+                            
                             valid_0 = np.where(CTX>-2147483647,1,0).astype(np.float32)
                             valid_1 = np.where(mole>-2147483647,1,0).astype(np.float32)
-
+                            
                             CTX [CTX <-2147483647]=0#np.nan
                             CTX  = CTX /255
                             CTX  = (CTX -0.5)/0.5
-
+                            
                             TW = TW/255
                             TW = (TW-0.5)/0.5
-
-
+                            
+                            
                             mole[mole<-2147483647]=np.nan
                             imageMean = np.nanmean(mole)
                             mole = (mole-imageMean)/1e8
                             mole= mole/0.25
                             mole[np.isnan(mole)]=0
-
-
-
+                            
+                            
+                            
                             inputs = np.stack([CTX,mole,valid_0,valid_1],axis=0)
-
+                            
                             inputs = np.concatenate([inputs,TW],axis=0)
-
+                            
                             inputsL.append(inputs)
                             jL.append(j)
                         W = np.ones([d_0//downsample,d//downsample],'float32')
@@ -2287,32 +2394,32 @@ if __name__ == '__main__':
                         W[-(d_0_down//4):] = np.where(W[-(d_0_down//4):]<np.linspace(1,0,d_0_down//4)[:,np.newaxis],W[-(d_0_down//4):],np.linspace(1,0,d_0_down//4)[:,np.newaxis])
                         W[:,:d_down//4] = np.where(W[:,:d_down//4]<np.linspace(0,1,d_down//4)[np.newaxis],W[:,:d_down//4],np.linspace(0,1,d_down//4)[np.newaxis])
                         W[:,-(d_down//4):] = np.where(W[:,-(d_down//4):]<np.linspace(1,0,d_down//4)[np.newaxis],W[:,-(d_down//4):],np.linspace(1,0,d_down//4)[np.newaxis])
-
+                        
                         inputs = np.stack(inputsL,axis=0)
                         inputs = np.stack([resize_array_with_zoom3d(inputs[:,k],(d_0,d_0)) for k in range(inputs.shape[1])],axis=1)
                         feature = net.outputFeature(inputs,d_0//downsample,d//downsample)
-
+                        
                         for index,j in enumerate(jL):
                             data0_ = f_out[k0][:,i//downsample:i//downsample+d_0//downsample,j//downsample:j//downsample+d//downsample].astype('float32')
                             fill = f_out['fill'][i//downsample:i//downsample+d_0//downsample,j//downsample:j//downsample+d//downsample].astype('float32')
-
-                            w = fill.reshape([1,d_0//downsample,d//downsample])
+                            
+                            w = fill.reshape([1,d_0//downsample,d//downsample])  
                             data0_ = w*data0_+(1-w)*data0[index]
                             f_out[k0][:,i//downsample:i//downsample+d_0//downsample,j//downsample:j//downsample+d//downsample] = data0_.astype('float16')
                             f_out['fill'][i//downsample:i//downsample+d_0//downsample,j//downsample:j//downsample+d//downsample] = W.astype('float16')
-
+                            
                         if laL[i]>86:
                             break
                         i += d_0-d_0//4
-
+                        
     if args.job == 'show_all_new':
-
+        
         net.load_state_dict(torch.load(modelFile))
         h5File_in = '/data/jiangyr/data/all_eqA_296.h5'
         h5File = '/data/jiangyr/data/all_eqA_296_predict.h5'
         k0 = 'tectonics_Extention'
-        k1 = 'tectonics_Compression'
-
+        k1 = 'tectonics_Compression'  
+        
         h5File_in = '/data/jiangyr/data/all_296.h5'
         h5File = '/data/jiangyr/data/all_296_predict.h5'
         k0 = 'tectonics_Extention'
@@ -2347,17 +2454,17 @@ if __name__ == '__main__':
                     plt.imshow(image.transpose([1,2,0]))
                     data0[data0<255/2]=np.nan
                     data1[data1<255/2]=np.nan
-
+                    
                     cmap = cm.get_cmap('bwr').copy()
 
                     # 设置NaN值的颜色为红色
                     cmap.set_bad(color=(1, 1, 1, 0.25),)
-
+                    
                     plt.imshow(data0,cmap=cmap,vmin=0,vmax=255,alpha=0.3,)
                     plt.ylim(plt.ylim()[::-1])
                     plt.savefig(f'{pltDir}{la:.1f}_{lo:.1f}.jpg',dpi=300)
                     plt.close()
-
+                    
                     plt.figure(figsize=(10,10))
                     plt.imshow(image.transpose([1,2,0]))
                     plt.imshow(data1,cmap=cmap,vmin=0,vmax=255,alpha=0.3)
@@ -2369,7 +2476,7 @@ if __name__ == '__main__':
         h5File_in = '/H5/all_eqA_296.h5'
         h5File = '/H5/all_eqA_296_predict.h5'
         k0 = 'tectonics_Extention'
-        k1 = 'tectonics_Compression'
+        k1 = 'tectonics_Compression'  
         dDegree = 10
         size = 2048
         pltDir  = plotDir+'show_all/'
@@ -2400,28 +2507,28 @@ if __name__ == '__main__':
                     plt.imshow(image.transpose([1,2,0]))
                     data0[data0<255/2]=np.nan
                     data1[data1<255/2]=np.nan
-
+                    
                     plt.imshow(data0,cmap='jet',vmin=0,vmax=255,alpha=0.3)
                     plt.ylim(plt.ylim()[::-1])
                     plt.savefig(f'{pltDir}{la:.1f}_{lo:.1f}.jpg',dpi=300)
                     plt.close()
-
+                    
                     plt.figure(figsize=(10,10))
                     plt.imshow(image.transpose([1,2,0]))
                     plt.imshow(data1,cmap='jet',vmin=0,vmax=255,alpha=0.3)
                     plt.ylim(plt.ylim()[::-1])
                     plt.savefig(f'{pltDir}{la:.1f}_{lo:.1f}_1.jpg',dpi=300)
                     plt.close()
-
-
-
-
+                    
+    
+       
+    
     if args.job == 'show_all_ds':
-        factor = 16
+        factor = 16 
         #size = 2048
         h5File = f'/H5/all_eqA_296_predict_ds_{factor}.h5'
         k0 = 'tectonics_Extention'
-        k1 = 'tectonics_Compression'
+        k1 = 'tectonics_Compression'  
         dDegree = 20
         size = 2048
         pltDir  = resDir+'show_all_ds/'
@@ -2449,12 +2556,12 @@ if __name__ == '__main__':
             plt.ylim(plt.ylim()[::-1])
             plt.savefig(f'{pltDir}1.jpg',dpi=600)
             plt.close()
-
-
-
-
-
-
+    
+                 
+    
+                        
+                        
+                        
     if 'predict' in sys.argv:
         net.load_weights(modelFile)
         with File(h5File,'r') as h5:
@@ -2473,7 +2580,7 @@ if __name__ == '__main__':
                 loL    = h5['loL'][:]
                 if args.dataMode=='both':
                     ctx = h5['CTX'][:]
-
+                    
                 for i in range(0,N,n//2):
                     for j in range(0,M,m//2):
                         #print(i/N,j/M)
@@ -2512,7 +2619,7 @@ if __name__ == '__main__':
                         if len(dataL)>0:
                             if (i+n>=N and j+m>=M) or len(iL)==100:
                                 data = np.concatenate(dataL,axis=0)
-
+                                
                                 output = net.Predict(data)
                                 for index in range(len(iL)):
                                     i = iL[index]
@@ -2524,7 +2631,7 @@ if __name__ == '__main__':
                                         data = output[index,k]
                                         if nn!=n or mm!=m:
                                             data = zoom(data,(nn/n,mm/m),order=1)
-
+                                        
                                         Output[key][i+nn//4:i+nn-nn//4,j+mm//4:j+mm-mm//4] = data[nn//4:-nn//4,mm//4:-mm//4]
                                 iL = []
                                 jL =[]
@@ -2553,7 +2660,7 @@ if __name__ == '__main__':
             tc[tc<args.d0]=np.nan
             te =te*0+1
             tc =tc*0+1
-
+            
             #print(te.shape)
             #print(image.shape)
             N,M = te.shape
@@ -2570,37 +2677,37 @@ if __name__ == '__main__':
                     #plt.colorbar()
                     plt.title('image')
                     plt.gca().set_aspect(1)
-
+                    
                     plt.subplot(3,2,2)
                     plt.imshow(image_con[i:i+n,j:j+m],rasterized=True)
                     plt.title('image_con')
                     plt.gca().set_aspect(1)
-
+                    
                     plt.subplot(3,2,3)
                     plt.imshow(image[i:i+n,j:j+m],rasterized=True)
                     plt.pcolormesh(te[i:i+n,j:j+m],cmap='bwr',vmin=0,vmax=1,rasterized=True)
                     #plt.colorbar()
                     plt.title('te')
-                    plt.gca().set_aspect(1)
-
+                    plt.gca().set_aspect(1)      
+                    
                     plt.subplot(3,2,4)
                     plt.imshow(image[i:i+n,j:j+m],rasterized=True)
                     plt.pcolormesh(tc[i:i+n,j:j+m],cmap='bwr',vmin=0,vmax=1,rasterized=True)
                     #plt.colorbar()
                     plt.title('tc')
                     plt.gca().set_aspect(1)
-
+                    
                     plt.subplot(3,2,5)
                     plt.imshow(image[i:i+n,j:j+m],rasterized=True)
                     plt.pcolormesh(te_predict[i:i+n,j:j+m],cmap='bwr',vmin=0,vmax=1,rasterized=True)
                     #plt.colorbar()
                     plt.title('te_output')
-                    plt.gca().set_aspect(1)
-
+                    plt.gca().set_aspect(1)       
+                    
                     plt.subplot(3,2,6)
                     plt.imshow(image[i:i+n,j:j+m],rasterized=True)
                     plt.pcolormesh(tc_predict[i:i+n,j:j+m],cmap='bwr',vmin=0,vmax=1,rasterized=True)
                     #plt.colorbar()
                     plt.title('tc_output')
                     plt.gca().set_aspect(1)
-                    plt.savefig(showDir+f'predict_{i}_{j}.jpg',dpi=500)
+                    plt.savefig(showDir+f'predict_{i}_{j}.jpg',dpi=500) 

@@ -21,10 +21,8 @@ Example (California region from the global GEBCO file):
 """
 import os, json, argparse, numpy as np, h5py, netCDF4 as nc, geopandas as gpd, warnings
 from datetime import datetime
-from pathlib import Path
 from scipy.ndimage import distance_transform_edt
 from matplotlib.colors import LightSource
-from project_paths import CODE_DIR, resolve_input, resolve_output, require_file
 warnings.filterwarnings('ignore')
 
 ap = argparse.ArgumentParser()
@@ -43,10 +41,6 @@ ap.add_argument('--seed', type=int, default=42)
 ap.add_argument('--no_split', action='store_true',
                 help='keep ALL tiles as train (multi-region builds: split is region-level)')
 args = ap.parse_args()
-
-args.nc = str(require_file(resolve_input(args.nc), 'GEBCO netCDF file'))
-args.shp = str(require_file(resolve_input(args.shp), 'fault shapefile'))
-args.out = str(resolve_output(args.out))
 
 NODATA = -2147483647
 HILLSHADE_AZ = [315, 75, 195]

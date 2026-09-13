@@ -1,9 +1,9 @@
 """
 evaluate.py  —  publication-grade evaluation on the spatial TEST split
 ======================================================================
-Run AFTER training on Ubuntu with CUDA (CPU/MPS fallback is also supported):
+Run AFTER training, on the Mac/GPU machine, from inside the "SAM code" folder:
 
-    python evaluate.py --resDir outputs/train_default
+    PYTORCH_ENABLE_MPS_FALLBACK=1 python evaluate.py --resDir train_ca_offshore_v1/
 
 Loads model.pth, runs deterministic CENTRE crops over every key in
 earth_dataset/key_test.lst (a spatially-separated region the model never saw),
@@ -16,16 +16,14 @@ and reports, for k0 (any fault) and k1 (dip-slip fault):
 Outputs: <resDir>/test_metrics.json  and  <resDir>/test_qualitative.png
 """
 import os, json, argparse, numpy as np, torch
-from pathlib import Path
 from h5py import File
 import matplotlib; matplotlib.use('Agg'); import matplotlib.pyplot as plt
 from scipy.ndimage import distance_transform_edt, binary_dilation
 from torchUnet import conv_sam
-from project_paths import DATA_DIR, OUTPUT_DIR, resolve_input, resolve_output, require_file
 
-ap = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-ap.add_argument('--resDir', default=str(OUTPUT_DIR / 'train_default'))
-ap.add_argument('--dataDir', default=str(DATA_DIR))
+ap = argparse.ArgumentParser()
+ap.add_argument('--resDir', default='train_ca_offshore_v1/')
+ap.add_argument('--dataDir', default='earth_dataset')
 ap.add_argument('--modelType', default='mars_sam')
 ap.add_argument('--crop', type=int, default=256)
 ap.add_argument('--d0', type=float, default=0.02)     # truth threshold (deg)
@@ -34,22 +32,14 @@ ap.add_argument('--keyFile', default='key_test.lst',  # e.g. key_test_unseen.lst
                 help='key list inside dataDir to evaluate on')
 args = ap.parse_args()
 
-data_dir = resolve_input(args.dataDir)
-res_dir = resolve_output(args.resDir)
-h5_path = require_file(data_dir / 'faults.h5', 'evaluation HDF5 dataset')
-key_path = require_file(data_dir / args.keyFile, 'evaluation key list')
-model_path = require_file(res_dir / 'model.pth', 'trained model checkpoint')
-res_dir.mkdir(parents=True, exist_ok=True)
-
-keys = [k for k in key_path.read_text().splitlines() if k]
-if not keys:
-    raise SystemExit(f'No evaluation keys found in {key_path}')
+H5 = f"{args.dataDir}/faults.h5"
+keys = [k for k in open(f"{args.dataDir}/{args.keyFile}").read().split('\n') if k]
 print(f"test tiles: {len(keys)}")
 
 dev = 'cuda:0' if torch.cuda.is_available() else ('mps' if getattr(torch.backends,'mps',None)
        and torch.backends.mps.is_available() else 'cpu')
 net = conv_sam(32, dropout=0., isvit=(args.modelType=='mars_sam_vit'), isalign=False).to(dev)
-net.load_state_dict(torch.load(model_path, map_location=dev, weights_only=True))
+net.load_state_dict(torch.load(f"{args.resDir}/model.pth", map_location=dev))
 net.eval()
 
 def build_input_full(g):
@@ -69,11 +59,9 @@ def build_input_full(g):
 # centre crop — the old version silently ignored the outer 1/3 of every test
 # tile. Overlapping window predictions are averaged.
 P0,P1,T0,T1=[],[],[],[]
-with torch.no_grad(), File(h5_path, 'r') as dataset:
+with torch.no_grad():
     for k in keys:
-        if k not in dataset:
-            raise KeyError(f"Key {k!r} from {key_path} is missing in {h5_path}")
-        inp,k0,k1=build_input_full(dataset[k])
+        inp,k0,k1=build_input_full(File(H5,'r')[k])
         C=args.crop; H,W=inp.shape[1],inp.shape[2]
         acc=np.zeros((2,H,W),'float32'); wgt=np.zeros((H,W),'float32')
         ii=sorted({0,(H-C)//2,H-C}); jj=sorted({0,(W-C)//2,W-C})
@@ -120,8 +108,7 @@ res={'n_test_tiles':len(keys),'d0_deg':args.d0,'tol_px':args.tol_px,
      'k0_any_fault':pr_metrics(P0,T0,args.tol_px),
      'k1_dip_slip' :pr_metrics(P1,T1,args.tol_px)}
 _stem = args.keyFile.replace('key_','').replace('.lst','')
-metrics_path = res_dir / f'{_stem}_metrics.json'
-metrics_path.write_text(json.dumps(res, indent=2))
+json.dump(res, open(f"{args.resDir}/{_stem}_metrics.json",'w'), indent=2)
 print(json.dumps(res, indent=2))
 
 # qualitative panel
@@ -132,5 +119,5 @@ for c,ii in enumerate(idx):
     ax[1,c].imshow(P0[ii],cmap='hot',vmin=0,vmax=1); ax[1,c].set_title('pred k0'); ax[1,c].axis('off')
     ax[2,c].imshow(P1[ii],cmap='hot',vmin=0,vmax=1); ax[2,c].set_title('pred k1 (dip-slip)'); ax[2,c].axis('off')
 plt.suptitle('TEST split — truth vs prediction'); plt.tight_layout()
-plt.savefig(res_dir / f'{_stem}_qualitative.png',dpi=120)
+plt.savefig(f"{args.resDir}/{_stem}_qualitative.png",dpi=120)
 print(f"saved {_stem}_metrics.json and {_stem}_qualitative.png")

@@ -30,26 +30,19 @@ Usage (after downloading the global GEBCO nc and cloning GEM):
 """
 import os, sys, json, argparse, subprocess
 import numpy as np
-from project_paths import CODE_DIR, PROJECT_ROOT, resolve_input, resolve_output
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--nc', required=True, help='global GEBCO netCDF file')
-ap.add_argument('--regions', default=str(CODE_DIR / 'regions_global.json'))
-ap.add_argument('--gem_shp', default=str(PROJECT_ROOT / 'gem-global-active-faults/shapefile/gem_active_faults_harmonized.shp'))
-ap.add_argument('--qfaults_shp', default=str(PROJECT_ROOT / 'Qfaults_GIS/SHP/Qfaults_US_Database.shp'))
-ap.add_argument('--workdir', default=str(CODE_DIR / 'regions_v6'))
-ap.add_argument('--out', default=str(CODE_DIR / 'earth_dataset_global'))
+ap.add_argument('--regions', default='regions_global.json')
+ap.add_argument('--gem_shp', default='gem-global-active-faults/shapefile/gem_active_faults_harmonized.shp')
+ap.add_argument('--qfaults_shp', default='../../Qfaults_GIS/SHP/Qfaults_US_Database.shp')
+ap.add_argument('--workdir', default='regions_v6')
+ap.add_argument('--out', default='earth_dataset_global')
 ap.add_argument('--cap', type=int, default=150, help='max tiles kept per region')
 ap.add_argument('--neg_frac', type=float, default=0.45, help='max negative share within the cap')
 ap.add_argument('--stride', type=int, default=96, help='tile stride px (96 = less overlap than CA v3)')
 ap.add_argument('--seed', type=int, default=11)
 args = ap.parse_args()
-args.nc = str(resolve_input(args.nc))
-args.regions = str(resolve_input(args.regions))
-args.gem_shp = str(resolve_input(args.gem_shp))
-args.qfaults_shp = str(resolve_input(args.qfaults_shp))
-args.workdir = str(resolve_output(args.workdir))
-args.out = str(resolve_output(args.out))
 
 cfg = json.load(open(args.regions))['regions']
 shp_of = {'gem': args.gem_shp, 'qfaults': args.qfaults_shp}
@@ -66,7 +59,7 @@ for r in cfg:
     rd = os.path.join(args.workdir, r['name'])
     if os.path.exists(os.path.join(rd, 'manifest.json')):
         print(f"[skip] {r['name']} already built"); continue
-    cmd = [sys.executable, str(CODE_DIR / 'prepare_dataset_gem.py'),
+    cmd = [sys.executable, 'prepare_dataset_gem.py',
            '--nc', args.nc, '--shp', shp_of[r['catalog']],
            '--bbox', *[str(b) for b in r['bbox']],
            '--out', rd, '--stride', str(args.stride), '--no_split']
@@ -121,7 +114,7 @@ print('\nSummary:')
 for name, role, built, npos, nneg in summary:
     print(f"  {name:14s} {role:5s}  built {built:4d}  kept {npos}+{nneg}neg")
 print(f"\nDone. Train with:\n"
-      f"  python trainV10.py --job train --modelType mars_sam \\\n"
+      f"  PYTORCH_ENABLE_MPS_FALLBACK=1 python trainV10.py --job train --model mars_sam --modelType mars_sam \\\n"
       f"    --dataset {args.out}/key_train.lst --resDir train_v6_global/ \\\n"
       f"    --mn 256 --batchsize 2 --stepPerMiniBatch 4 --epochs 40 \\\n"
       f"    --lr0 1e-4 --d0 0.02 --dw 0.08 --alpha 0.1 --dropout 0 \\\n"

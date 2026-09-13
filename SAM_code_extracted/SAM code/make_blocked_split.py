@@ -27,10 +27,9 @@ Usage:
 """
 import argparse, json, os, shutil, sys
 from collections import Counter, defaultdict
-from project_paths import DATA_DIR, resolve_input
 
 ap = argparse.ArgumentParser()
-ap.add_argument('--dataDir', default=str(DATA_DIR))
+ap.add_argument('--dataDir', default='earth_dataset_v3')
 ap.add_argument('--cell', type=float, default=2.0, help='cell size in degrees')
 ap.add_argument('--ftest', type=float, default=0.20, help='target test fraction')
 ap.add_argument('--fval', type=float, default=0.12, help='target val fraction')
@@ -43,7 +42,6 @@ ap.add_argument('--pattern', default='threeway', choices=['threeway', 'twoway', 
                      "extra spatial boundary cost ~20%% of all tiles)")
 ap.add_argument('--seed', type=int, default=7)
 args = ap.parse_args()
-args.dataDir = str(resolve_input(args.dataDir))
 
 man = json.load(open(os.path.join(args.dataDir, 'manifest.json')))
 prov, tiles = man['provenance'], man['tiles']

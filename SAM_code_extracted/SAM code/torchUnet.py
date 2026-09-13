@@ -1,21 +1,19 @@
 
 import math
-from pathlib import Path
 import torch
 from torch import nn
 from torch.nn import init
 from torch.nn import functional as F
 from torch.optim.lr_scheduler import _LRScheduler
 import numpy as np
-from project_paths import SAM2_CHECKPOINT
 from sam2.build_sam import build_sam2
 from sam2.utils.transforms import SAM2Transforms
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 
 model_cfg = "sam2_hiera_l.yaml"
-sam2_checkpoint = Path(__file__).resolve().parent / 'sam2_hiera_large.pt'
-model_cfg = "sam2_hiera_s.yaml"
-sam2_checkpoint = SAM2_CHECKPOINT
+sam2_checkpoint = 'sam2_hiera_large.pt'
+model_cfg = "configs/sam2/sam2_hiera_s.yaml"
+sam2_checkpoint = 'sam2_hiera_small.pt'
 #sam2_model = build_sam2(model_cfg, sam2_checkpoint)
 sam2_model_build = lambda: build_sam2(model_cfg, sam2_checkpoint,image_size=(256,256),device='cpu')
 
@@ -41,7 +39,7 @@ class SpatialAwareAffineAlign(nn.Module):
             nn.AvgPool2d(2, 2, 1),
             ResBlock(feature_channels*4, final_channels, dropout=0),
         )
-
+       
         # MLP head with adaptive layer sizes
         self.mlp_head = nn.Sequential(
             nn.Linear(final_channels, final_channels * 2),
@@ -70,7 +68,7 @@ class SpatialAwareAffineAlign(nn.Module):
 
         # Get transformation parameters
         theta_0, theta_1 = self.get_theta(x)
-
+        
         # Create grids for each transformation
         grid0 = F.affine_grid(theta_0, [B, 1, H, W], align_corners=False)
         grid1 = F.affine_grid(theta_1, [B, 3, H, W], align_corners=False)
@@ -82,7 +80,7 @@ class SpatialAwareAffineAlign(nn.Module):
 
         # Concatenate results with original channels
         return torch.cat([x0, x[:, 1:2], x1, x[:, 3:4], x3], dim=1)
-
+    
 class Reconstruct(nn.Module):
     def __init__(self, in_Channel,out_Channel,dropout=0,ch=32,head_num=1):
         super().__init__()
@@ -100,7 +98,7 @@ class Reconstruct(nn.Module):
                     dropout=dropout, attn=False,head_num=head_num,dilation=4),
         )
         self.conv_out = nn.Conv2d(ch*2,out_Channel)
-
+    
 
 class Swish(nn.Module):
     def forward(self, x):
@@ -162,7 +160,7 @@ class AttnBlock(nn.Module):
 
     def forward(self, x):
         B, C, H, W = x.shape
-
+        
         wL = torch.arange(W, device=x.device).float()
         hL = torch.arange(H, device=x.device).float()
         maxT =512#8*max(H,W)
@@ -173,14 +171,14 @@ class AttnBlock(nn.Module):
         #fL_reversed = fL.flip(0)
         hf = hL[None, None, :, None] * fL[None,:, None, None]
         wf = wL[None, None, None, :] * fL[None,:,None, None]
-
+        
         wf = wf.expand(1, C//4, H,W)*2*math.pi
         hf = hf.expand(1, C//4, H,W)*2*math.pi
-
+        
         emb = torch.cat([torch.sin(wf), torch.cos(wf), torch.sin(hf), torch.cos(hf)], dim=1)
         emb = self.emb(emb)
         #h = x
-
+        
         h = self.group_norm(x)+emb
         q = self.proj_q(h)
         k = self.proj_k(h)
@@ -191,7 +189,7 @@ class AttnBlock(nn.Module):
         k = k.reshape(B_cal ,C_cal, H * W)
         q = q.reshape(B_cal ,C_cal, H * W)
         v = v.reshape(B_cal ,C_cal, H * W)
-
+        
         q = q.permute(0, 2,  1).reshape(B_cal, H * W, C_cal)
         w = torch.bmm(q, k) * (int(C_cal) ** (-0.5))
         #q = q.reshape(B, H * W, C//self.head_num,self.head_num)
@@ -264,7 +262,7 @@ class Clip(nn.Module):
         self.max_val = max_val
 
     def forward(self, x):
-        #x =
+        #x = 
         return torch.sigmoid(x)*(self.max_val-self.min_val)+self.min_val
 class conv_sam(nn.Module):
     def __init__(self, ch, sam_build=sam2_model_build,head_num=4,dropout=0,in_Channel=7,out_Channel=3,mask_threshold=0.0,max_hole_area=0.0,max_sprinkle_area=0.0,n=256,m=256,reRandom=False,isvit=True,isalign=False):
@@ -272,7 +270,7 @@ class conv_sam(nn.Module):
         self.m = m
         self.out_Channel = out_Channel
         self.isvit = isvit
-
+        
         super().__init__()
         self.sam = sam_build()
         self.isalign = isalign
@@ -282,11 +280,11 @@ class conv_sam(nn.Module):
             self.vit = vit_build()
             vitChannel = 512
             self.convvit = nn.Conv2d(vitChannel, ch*8, kernel_size=1, stride=1, padding=0)
-
+            
             self.input_vit = nn.Sequential(
                 nn.Conv2d(ch*2, 3, kernel_size=3, stride=1, padding=1),)
                 #Clip(-1,1),)
-
+        
         if reRandom:
             print('reRandom')
             exit()
@@ -294,7 +292,7 @@ class conv_sam(nn.Module):
                 if param.requires_grad:
                     #if len(param.shape)>1:
                     init.xavier_uniform_(param)
-
+        
         self.head = nn.Sequential(
             nn.Conv2d(in_Channel, ch//2, kernel_size=3, stride=1, padding=1),
             ResBlock(
@@ -309,9 +307,9 @@ class conv_sam(nn.Module):
         )
         self.input_sam = nn.Sequential(
                 nn.Conv2d(ch*2, 3, kernel_size=3, stride=1, padding=1))
-
+        
         #if isvit:
-
+            
         self.conv0 = nn.Sequential(
             nn.Conv2d(ch*2, ch*8, kernel_size=1, stride=1, padding=0),
             nn.AvgPool2d(16, stride=16),
@@ -322,7 +320,7 @@ class conv_sam(nn.Module):
         )
         self.conv2 = nn.Sequential(
             nn.Conv2d(ch*2, ch, kernel_size=1, stride=1, padding=0),
-            nn.AvgPool2d(4, stride=4),
+            nn.AvgPool2d(4, stride=4),  
         )
         self.conv3 = nn.Sequential(
             nn.Conv2d(ch*2, ch, kernel_size=1, stride=1, padding=0),
@@ -361,7 +359,7 @@ class conv_sam(nn.Module):
             'conv0', 'conv1', 'conv2', 'conv3', 'conv_sam_0', 'conv_sam_1', 'conv_sam_2'
         ]
 
-
+       
         if self.isvit:
             base_not_sam = base_not_sam[:-3]+['convvit','input_vit']+base_not_sam[-3:]
         # Create in_sam ModuleList
@@ -376,12 +374,12 @@ class conv_sam(nn.Module):
         if self.isalign:
             x = self.align(x)
         h = self.head(x)
-
+        
         sam_h = self.sam.forward_image(self.input_sam(h))
-
+        
         if self.isvit:
             vit_h = self.vit.forward_features(self.input_vit(h)).view(x.shape[0],16,16,-1).permute(0,3,1,2)
-
+            
             sam_h0 = self.upblock0(self.conv_sam_0(sam_h['vision_features'])+self.conv0(h)+self.convvit(vit_h))
         else:
             sam_h0 = self.upblock0(self.conv_sam_0(sam_h['vision_features'])+self.conv0(h))
@@ -396,17 +394,17 @@ class conv_sam(nn.Module):
         if self.isalign:
             x = self.align(x)
         h = self.head(x)
-
+        
         sam_h = self.sam.forward_image(self.input_sam(h))#['backbone_fpn'][1]
-
+        
         if self.isvit:
             vit_h = self.vit.forward_features(self.input_vit(h)).view(x.shape[0],16,16,-1).permute(0,3,1,2)
-
+            
             return self.conv_sam_0(sam_h['vision_features'])+self.conv0(h)+self.convvit(vit_h)
-
+            
         else:
             return self.conv_sam_0(sam_h['vision_features'])+self.conv0(h)
-
+            
     def outputFeature(self,x, d0,d1,D1=0,D2=0,D=512,batch_size=4):
         featureL = []
         for i in range(0,len(x),batch_size):
@@ -420,7 +418,7 @@ class conv_sam(nn.Module):
                 feature = torch.nn.functional.adaptive_avg_pool2d(feature,(d0,d1))
             if D1>0:
                 feature = torch.nn.functional.interpolate(feature,(D1,D2))
-
+            
             featureL.append(feature.cpu().detach().numpy())
         return np.concatenate(featureL)
     @torch.no_grad()
@@ -494,7 +492,7 @@ class conv_sam(nn.Module):
                 j1 = min(j+self.m,x.shape[2])
                 j=j1-self.m
                 inputsL.append(x[:,i:i1,j:j1])
-            #inputsL.append(x[i:i1])
+            #inputsL.append(x[i:i1]) 
         inputs = np.array(inputsL)
         outputs = self.Predict(inputs)
         print(inputs.shape,outputs.shape)
@@ -553,7 +551,7 @@ class UNet(nn.Module):
 
         self.head = nn.Conv2d(in_Channel, ch, kernel_size=3, stride=1, padding=1)
         self.downblocks = nn.ModuleList()
-        chs = [ch]
+        chs = [ch] 
         now_ch = ch
         for i, mult in enumerate(ch_mult):
             out_ch = ch * mult
@@ -618,7 +616,7 @@ class UNet(nn.Module):
         assert len(hs) == 0
         h = self.Out(h)
         #h = h*std
-
+        
         return h
     def Predict_(self,x):
         self.eval()
@@ -645,7 +643,7 @@ class UNet(nn.Module):
             for j in range(0,len(x[0]),self.m):
                 j1 = min(j+self.m,len(x[0]))
                 inputsL.append(x[i:i1,j:j1])
-            inputsL.append(x[i:i1])
+            inputsL.append(x[i:i1]) 
         inputs = np.array(inputsL)
         outputs = self.Predict(inputs)
         x_out = x*0
@@ -670,7 +668,7 @@ class UNet(nn.Module):
             for j in range(0,len(x[0]),self.m):
                 j1 = min(j+self.m,len(x[0]))
                 inputsL.append(x[i:i1,j:j1])
-            inputsL.append(x[i:i1])
+            inputsL.append(x[i:i1]) 
         inputs = np.array(inputsL)
         outputs = self.Predict(inputs)
         x_out = x*0
@@ -727,14 +725,14 @@ def huber_loss(x0,xP, delta=1e-1,trace_weight=True):
     return (torch.where(absx < delta, 0.5 * x ** 2, delta * (absx - 0.5 * delta))*weight).mean()
 
 def IoU___(y_true, y_pred,sw=1,delta=1/20):#,eps=1e-1):
-
+    
     y_pred = y_pred[:,:y_true.shape[1]]
     dy = y_true - y_pred
     sw = sw/sw.mean()
-    #loss =
+    #loss = 
     return (dy**2*sw).mean()
 def IoU(y_true, y_pred,sw=1,delta=1/20):#,eps=1e-1):
-
+    
     y_pred = y_pred[:,:y_true.shape[1]]
     eps = 1e-5
     union=torch.where(y_true>y_pred,y_true,y_pred)
@@ -746,7 +744,7 @@ def IoU(y_true, y_pred,sw=1,delta=1/20):#,eps=1e-1):
     return loss
 def Dice(y_true, y_pred, sw=1, delta=1/20):
     eps = 1e-5
-
+    
     y_true = y_true.float()
     y_pred = y_pred.float()
 
@@ -798,11 +796,16 @@ def FocalTversky(y_true, y_pred, sw=1, delta=1/20,
     fn = torch.sum(sw  * y_true        * (1. - y_pred))
     fp = torch.sum(fp_w * (1. - y_true) * y_pred)
     tversky = (tp + eps) / (tp + tv_beta * fn + tv_alpha * fp + eps)
-    return (1. - tversky) ** gamma
+    # For gamma < 1, x**gamma has an infinite derivative at x=0.
+    # Float32 can round Tversky to exactly 1 on almost-perfect/empty crops;
+    # backward then produces NaN even while the displayed loss is zero.
+    # Bound only this singular neighborhood; ordinary loss values are unchanged.
+    error = (1. - tversky).clamp_min(torch.finfo(tversky.dtype).eps)
+    return error ** gamma
 def IoU__(y_true, y_pred,sw=1,delta=1/20):#,eps=1e-1):
     y_pred = y_pred[:,:y_true.shape[1]]
     eps = 1e-5
-
+    
     union = torch.mean((y_true+y_pred)*sw)*0.5
     overlap = torch.mean((y_true*y_pred)*sw)
     mean = torch.mean(y_true)*10
@@ -850,3 +853,4 @@ if __name__ == '__main__':
     y = model(x)
     theta_0,theat_1 = model.get_theta(x)
     print(theat_1)
+    

@@ -1,22 +1,18 @@
 """
-smoke_test_mac.py  —  RUN THIS FIRST before the long training.
+smoke_test_mac.py  —  RUN THIS FIRST on the Mac, before the long training.
 ------------------------------------------------------------------
 It does ONE real training step with the actual SAM model + your dataset:
   Generator_new -> conv_sam (SAM-2) -> Dice loss -> backward -> optimizer step
 If it prints "SMOKE TEST PASSED", the full run in run.sh will work too.
-Supports CUDA on Linux, MPS on macOS, and CPU fallback.
+Takes <1-2 min on CPU/MPS. Place this file inside the "SAM code" folder and run:
+    PYTORCH_ENABLE_MPS_FALLBACK=1 python smoke_test_mac.py
 """
-from pathlib import Path
-
-import numpy as np
-import torch
+import os, numpy as np, torch
 from tool import Generator_new, collate_function
 from torchUnet import conv_sam, Dice
-from project_paths import DATA_DIR, DATA_H5, require_file
 
-BASE_DIR = Path(__file__).resolve().parent
-H5 = require_file(DATA_H5, 'training HDF5 dataset')
-KEY = require_file(DATA_DIR / 'key_train.lst', 'training key list')
+H5  = 'earth_dataset/ca_offshore_faults.h5'
+KEY = 'earth_dataset/key.lst'
 D0, DW, ALPHA = 0.02, 0.08, 0.05      # match recommended training settings
 
 # ---- device (CUDA / Apple MPS / CPU) ----
@@ -26,7 +22,7 @@ else: device='cpu'
 print('device =', device)
 
 # ---- data: pull one real batch through the REAL Generator_new ----
-keys = [line.strip() for line in KEY.read_text().splitlines() if line.strip()]
+keys = open(KEY).read().split('\n')[:-1]
 ds = Generator_new(H5, keys, m=256, n=256, training=True)
 batch = collate_function([ds[0], ds[1]])          # list: [image(2,7,256,256), label(2,3,256,256)]
 image  = torch.from_numpy(batch[0]).float().to(device)

@@ -6,17 +6,8 @@ trained on fault PRESENCE, concentrating all capacity on the task that works.
 Run once, in the venv, from inside "SAM code":
     python set_k1_eq_k0.py
 """
-import argparse
 import h5py
-from project_paths import DATA_H5, resolve_input, require_file
-
-ap = argparse.ArgumentParser()
-ap.add_argument('--h5', default=str(DATA_H5), help='dataset to modify in place')
-ap.add_argument('--yes', action='store_true', help='confirm the destructive in-place edit')
-args = ap.parse_args()
-H5 = require_file(resolve_input(args.h5), 'HDF5 dataset')
-if not args.yes:
-    raise SystemExit(f'Refusing to modify {H5} without --yes')
+H5 = "earth_dataset/ca_offshore_faults.h5"
 with h5py.File(H5, "a") as f:
     n = 0
     for k in list(f.keys()):

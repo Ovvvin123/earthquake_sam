@@ -10,10 +10,9 @@ uses:  sw = exp(-d^2/dw^2)*(1-alpha)+alpha
 """
 import h5py, numpy as np, torch, torch.nn as nn, torch.nn.functional as F
 import matplotlib; matplotlib.use('Agg'); import matplotlib.pyplot as plt
-from pathlib import Path
 
-BASE = Path(__file__).resolve().parent
-H5 = BASE / 'SAM_code_extracted' / 'SAM code' / 'earth_dataset_v3' / 'faults.h5'
+BASE="/sessions/hopeful-great-ptolemy/mnt/Earthquake - SAM"
+H5=f"{BASE}/earth_dataset/ca_offshore_faults.h5"
 D0=0.02; DW=0.06; ALPHA=0.05
 DS=4          # downsample tiles 256->64 so this fits the CPU time budget
 torch.manual_seed(0); np.random.seed(0); torch.set_num_threads(4)
@@ -87,7 +86,7 @@ plt.figure(figsize=(7,4))
 plt.plot(hist[:,0],'o-',ms=3,label='train'); plt.plot(hist[:,1],'s-',ms=3,label='val')
 plt.xlabel('epoch'); plt.ylabel('weighted BCE+Dice loss'); plt.legend(); plt.grid(alpha=.3)
 plt.title('CPU proof-of-concept — loss DECREASES (no collapse)')
-plt.tight_layout(); plt.savefig(BASE / 'poc_loss_curve.png',dpi=130)
+plt.tight_layout(); plt.savefig(f'{BASE}/poc_loss_curve.png',dpi=130)
 
 # ---------- prediction panel on validation tiles ----------
 net.eval()
@@ -101,6 +100,6 @@ with torch.no_grad():
         ax[1,c].imshow(Y[ii,0].numpy(),cmap='hot'); ax[1,c].set_title('truth (fault)'); ax[1,c].axis('off')
         ax[2,c].imshow(pr,cmap='hot',vmin=0,vmax=1); ax[2,c].set_title('prediction'); ax[2,c].axis('off')
 plt.suptitle('Validation tiles: truth vs prediction (structure learned, not flat)')
-plt.tight_layout(); plt.savefig(BASE / 'poc_predictions.png',dpi=120)
+plt.tight_layout(); plt.savefig(f'{BASE}/poc_predictions.png',dpi=120)
 print("saved poc_loss_curve.png and poc_predictions.png")
 print(f"loss start {hist[0,1]:.4f} -> end {hist[-1,1]:.4f}  (drop {(1-hist[-1,1]/hist[0,1])*100:.0f}%)")
