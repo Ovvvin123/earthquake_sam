@@ -370,7 +370,9 @@ class conv_sam(nn.Module):
             self.in_sam.append(self.align)
         if self.isvit:
             self.in_sam.append(self.vit)
-    def forward(self, x):
+    def forward(self, x, feature_masks=None):
+        if feature_masks is not None:
+            return self._forward_with_feature_masks(x, feature_masks)
         if self.isalign:
             x = self.align(x)
         h = self.head(x)
@@ -389,6 +391,39 @@ class conv_sam(nn.Module):
         sam_h = self.upblock2(sam_h2)
         h = self.conv3(h)+sam_h
         return self.tail(h)
+
+    def complementary_feature_channels(self):
+        # Include the local high-resolution skip so it cannot bypass perturbation.
+        return (self.conv_sam_0.out_channels, self.conv_sam_1.out_channels,
+                self.conv_sam_2.out_channels, self.conv3[0].out_channels)
+
+    def _forward_with_feature_masks(self, x, masks):
+        if not self.training:
+            raise ValueError('Feature masks are training-only; inference uses normal forward.')
+        channels = self.complementary_feature_channels()
+        if len(masks) != len(channels):
+            raise ValueError('Expected one feature mask per decoder input scale.')
+        for mask, channel in zip(masks, channels):
+            if mask.shape != (x.shape[0], channel, 1, 1) or mask.device != x.device:
+                raise ValueError('Feature mask batch/channel/device mismatch.')
+        if self.isalign:
+            x = self.align(x)
+        h = self.head(x)
+        sam_h = self.sam.forward_image(self.input_sam(h))
+        deepest = self.conv_sam_0(sam_h['vision_features']) + self.conv0(h)
+        if self.isvit:
+            vit_h = self.vit.forward_features(self.input_vit(h)).view(
+                x.shape[0], 16, 16, -1).permute(0, 3, 1, 2)
+            deepest = deepest + self.convvit(vit_h)
+        decoded = self.upblock0(deepest * masks[0])
+        decoded = self.upblock1(
+            decoded + (self.conv_sam_1(sam_h['backbone_fpn'][1])
+                       + self.conv1(h)) * masks[1])
+        decoded = self.upblock2(
+            decoded + (self.conv_sam_2(sam_h['backbone_fpn'][0])
+                       + self.conv2(h)) * masks[2])
+        return self.tail(self.conv3(h) * masks[3] + decoded)
+
     @torch.no_grad()
     def OutputFeature(self, x):
         if self.isalign:

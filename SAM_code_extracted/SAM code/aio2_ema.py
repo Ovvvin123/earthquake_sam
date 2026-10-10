@@ -135,7 +135,14 @@ def load_ema_checkpoint(path, student, optimizer, teacher, config):
     saved_config = checkpoint['config']
     transition = config.get('emaStageTransition', False)
     online_keys = {key for key in config.keys() | saved_config.keys() if key.startswith('online')}
+    unimatch_keys = {key for key in config.keys() | saved_config.keys()
+                     if key.startswith('unimatch')}
+    if not config.get('unimatch', False) and not saved_config.get('unimatch', False):
+        ignored.update(unimatch_keys)  # old checkpoints remain compatible
     if transition:
+        if saved_config.get('unimatch', False):
+            raise ValueError('Stage transition requires a source without UniMatch training.')
+        ignored.update(unimatch_keys)
         if saved_config.get('onlineCorrection', False) or not config.get('fixedVal', False):
             raise ValueError('Stage transition requires a warm-up source and fixed validation.')
         if Path(config['resDir']).resolve() == Path(saved_config['resDir']).resolve():

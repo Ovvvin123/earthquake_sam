@@ -1,0 +1,17 @@
+# Install torch/torchvision from the official cu126 index first (see setup_wsl.sh).
+torch==2.7.1
+torchvision==0.22.1
+numpy==2.2.6
+h5py
+scipy
+matplotlib
+pyshp
+pillow
+geopandas
+netCDF4
+timm
+numba
+hydra-core
+iopath
+tqdm
+ipykernel

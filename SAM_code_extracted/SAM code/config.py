@@ -58,7 +58,36 @@ parser.add_argument('--fixedVal', action='store_true', help='fixed center crop p
 parser.add_argument('--checkpointEvery', type=int, default=20, help='full stage checkpoints with --fixedVal; 0 disables')
 parser.add_argument('--emaStageTransition', action='store_true', help='explicitly fork a warm-up checkpoint into a new fixed-validation run')
 
+# Fault-specific UniMatch V2 adaptation; old commands remain opt-out.
+parser.add_argument('--unimatch', action='store_true', help='SAM-2 dual strong views with positive-only consistency; requires online correction')
+parser.add_argument('--unimatchStart', type=int, default=41, help='first consistency epoch, one-based')
+parser.add_argument('--unimatchRampEnd', type=int, default=80, help='epoch at which consistency reaches maximum weight')
+parser.add_argument('--unimatchWeight', type=float, default=0.1, help='maximum auxiliary consistency loss coefficient')
+parser.add_argument('--unimatchNoDropout', action='store_true', help='ablation: dual strong images without complementary feature dropout')
+parser.add_argument('--unimatchContrast', type=float, default=0.2, help='shared display-channel contrast range around 1')
+parser.add_argument('--unimatchBrightness', type=float, default=0.1, help='display-channel brightness shift in normalized units')
+parser.add_argument('--unimatchNoise', type=float, default=0.03, help='shared display-channel Gaussian noise standard deviation')
+
 args = parser.parse_args()
+if args.unimatch:
+    from pathlib import Path
+    import os
+    args.resDir = os.path.join(args.resDir, '')
+    if not args.emaResume and any((Path(args.resDir) / name).exists() for name in
+                                  ('ema_checkpoint.pth', 'model.pth', 'best_metrics.json')):
+        parser.error('UniMatch output already contains a run; use --emaResume or a new --resDir')
+    if not (args.onlineCorrection and args.emaTeacher and args.k0Only
+            and args.lossFunc == 'FocalTversky' and args.job == 'train'):
+        parser.error('--unimatch requires --onlineCorrection, --emaTeacher, --k0Only and FocalTversky training')
+    if args.modelType != 'mars_sam' or args.isalign:
+        parser.error('This UniMatch adaptation supports --modelType mars_sam without --isalign')
+    if not (args.onlineStart <= args.unimatchStart <= args.unimatchRampEnd):
+        parser.error('Require onlineStart <= unimatchStart <= unimatchRampEnd')
+    if not (0 <= args.unimatchWeight <= 1):
+        parser.error('--unimatchWeight must be finite and in [0, 1]')
+    if not all(0 <= value <= 1 for value in
+               (args.unimatchContrast, args.unimatchBrightness, args.unimatchNoise)):
+        parser.error('UniMatch augmentation strengths must be finite and in [0, 1]')
 if args.onlineCorrection:
     if not (args.emaTeacher and args.k0Only and args.lossFunc == 'FocalTversky' and args.job == 'train'):
         parser.error('--onlineCorrection requires training, --emaTeacher, --k0Only and FocalTversky')

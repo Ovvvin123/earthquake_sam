@@ -1,0 +1,103 @@
+V5_different_split 实验运行说明
+
+范围
+所有修改、生成数据、训练与评估输出均位于本目录。
+GEBCO 和 ca_offshore.* 从原目录只读加载，不复制、不修改。
+这是一套区域内随机训练/验证实验，没有独立测试集。
+
+已生成的数据
+目录：datasets/ca_stride384
+区域：经度 -125 至 -116.5，纬度 31.5 至 41。
+实际栅格：2280×2040，4651200 个有效源像素。
+切片：384×384，双向步长384，36块；11块为边缘补齐块。
+训练29块（9块包含目录断层像素），验证7块（2块包含目录断层像素）。
+划分：80/20，seed=7，按是否包含目录断层像素分层随机。
+保留全部有效切片，包括平坦背景；不采用旧纬度带筛选或负样本随机丢弃。
+正样本分层定义改为至少1个有效断层像素；dense_positive另记录旧的>=40像素统计。
+整个矩形区域均保留，没有额外施加海洋/陆地筛选。
+
+处理链
+prepare_dataset_gem.py -> datasets/ca_stride384/faults.h5 + key.lst + manifest.json
+make_random_split.py -> key_train.lst + key_val.lst + split_info.json，并同步元数据
+ audit_grid_dataset.py -> audit.json + split_map.png
+trainV10.py -> train_grid.py -> GridDataset / conv_sam / FocalTversky / 可选教师与UniMatch
+ evaluate.py -> val_metrics.json + val_qualitative.png
+
+关键实现
+1. 填充发生在特征和距离图计算后。原始NetCDF缺失值也有显式有效性掩码。
+2. 距离图在整个提取区域上计算，避免每个切片边缘截断邻近断层距离。
+3. H5的valid字段标记真实有效像素；填充图像为0，填充标签为999。
+4. 地形拉伸/高程标准化只使用有效像素；训练、教师补标、评估均排除无效像素。
+5. tool.py中的Generator_new在本实验中指向grid_data.GridDataset。
+6. 模型结构不变：七通道256×256输入，模型保留三输出，损失仅监督k0。
+7. 验证不随机裁剪或增强。使用重叠256窗口覆盖每块384切片，重叠预测平均。
+8. AP采用按分数分组的精确平均精度；F1/IoU等固定阈值0.5，区别于旧脚本搜最佳阈值。
+9. teacher模块与UniMatch算法复用现有实现，调度改由step_schedule.py按更新次数控制。
+10. trainV10.py在本目录只允许train作业；旧工具代码保留但不作为本实验执行入口。
+
+运行（在WSL Ubuntu-22.04终端）
+cd "/mnt/f/Study————————/UCLA/Earthquake-SAM_交接/SAM_code_extracted/SAM code/V5_different_split"
+source activate_wsl.sh
+
+数据已生成，不要重复构建至同一目录。构建器和划分器会拒绝覆盖现有成品。
+如需重建到新的子目录：
+python prepare_dataset_gem.py --out datasets/ca_stride384_v2
+python make_random_split.py --dataDir datasets/ca_stride384_v2 --seed 7 --valFraction 0.2
+python audit_grid_dataset.py --dataDir datasets/ca_stride384_v2
+完全随机而不分层：给make_random_split.py额外传 --random。
+原始文件与区域也可通过 --nc、--shp、--bbox 明确指定。
+prepare_grid_wsl.sh仅为默认目录的一次性三步构建入口，已有数据时不要重跑。
+
+正式纯监督训练（尚未启动）：
+bash train_wsl.sh
+输出：runs/supervised
+
+正式教师+UniMatch实验（尚未启动）：
+bash train_unimatch_wsl.sh
+输出：runs/teacher
+
+两者默认使用相同划分、seed、初始化与3200次参数更新预算，便于比较。
+教师实验默认emaDecay=0.98，800次更新后启用在线补标/一致性，1000次结束低权重保持，1600次达到最大权重。
+教师从第1次学生更新开始进行EMA，不等到800步才创建。
+纯监督和教师实验默认pu=0；若单独测试旧PU机制，可在纯监督脚本增加 --pu 0.4。
+在线补标与PU在当前实现中互斥。
+
+训练时间控制
+默认batchsize=2，stepPerMiniBatch=4；29块训练数据每轮4次更新，最后一组为5样本。
+maxSteps=3200约等于800轮；800次更新后开启教师约在第201轮。
+使用 --maxSteps 设置更新预算，而不是 --epochs；原epoch调度参数不参与新训练器。
+默认每100步验证并保存完整检查点；每步记录history.jsonl。
+学习率预热20步；40/80/160步降低头部学习率，SAM组为头部学习率的1/8。
+验证最佳学生保存为model.pth；最佳教师保存为teacher/model.pth。
+没有自动早停；maxSteps是预算上限，应依据验证趋势调整后续实验。
+
+断点恢复
+纯监督：
+bash train_wsl.sh --resume runs/supervised/grid_checkpoint.pth --maxSteps 3200
+教师：
+bash train_unimatch_wsl.sh --resume runs/teacher/grid_checkpoint.pth --maxSteps 3200
+检查点包括学生、优化器、教师、global_step、当前随机排列/读取位置、随机数状态及数据指纹。
+只恢复本实验grid_checkpoint.pth，不恢复旧V5权重或旧ema_checkpoint.pth。
+评估间隔可改变，核心训练/调度参数和数据指纹必须一致；恢复不重复已完成更新。
+
+评估
+python evaluate.py --resDir runs/supervised
+python evaluate.py --resDir runs/teacher
+python evaluate.py --resDir runs/teacher/teacher
+若训练使用其他d0/dw/alpha，评估也要显式传入相同值。
+评估会核验训练数据指纹，不能换一份名单后直接评估旧模型。
+
+短流程测试（已执行，不能当作正式模型）
+runs/smoke_teacher：4步，测试中故意提前启用教师和UniMatch；与正式调度不同。
+runs/smoke_supervised：1步，仅检查真实梯度累积与验证。
+reports/gpu_smoke.json：真实GPU前向/反向/梯度和参数更新检查。
+这些smoke模型只验证运行正确，不具有科研评估意义。
+
+测试命令
+python -m unittest test_grid_pipeline test_grid_training test_aio2_online test_unimatch_fault -v
+python smoke_test_wsl.py
+
+局限
+验证集中仅2块含目录断层，指标可能波动；目录无断层标注不等于地质上无断层。
+不重叠消除了共享源像素，但相邻块仍可能属于同一地质结构。
+这套随机验证不能代替独立海域的泛化评估，也不应直接与旧空间test指标比较。

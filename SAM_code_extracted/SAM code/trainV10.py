@@ -1087,6 +1087,14 @@ if __name__ == '__main__':
             with open(os.path.join(resDir, 'ema_config.json'), 'w') as f:
                 json.dump(vars(args), f, indent=2)
         online_enabled = getattr(args, 'onlineCorrection', False)
+        unimatch_enabled = getattr(args, 'unimatch', False)
+        if unimatch_enabled:
+            from unimatch_fault import (consistency_weight, backward_strong_views,
+                                        ConsistencyDiagnostics)
+            if not hasattr(net, 'complementary_feature_channels'):
+                raise ValueError('UniMatch requires the conv_sam feature-mask interface.')
+            print('UniMatch-inspired training: original branch + two strong views; '
+                  'positive-only consistency; SAM-2 retained.')
         fixed_validation_enabled = getattr(args, 'fixedVal', False)
         best_checkpoints = None
         if online_enabled or fixed_validation_enabled:
@@ -1118,6 +1126,12 @@ if __name__ == '__main__':
             print(f'Fixed preview enabled: {len(fixed_preview.samples)} training crops; preview candidates are not training labels')
         for i in range(start_epoch, args.epochs):   # total target epochs, also on resume
             epoch_loss=0
+            um_weight = consistency_weight(i + 1, args) if unimatch_enabled else 0.
+            um_diagnostics = ConsistencyDiagnostics(
+                i + 1, um_weight, resDir,
+                capture=(getattr(args, 'emaPreview', False) and
+                         ((i + 1) % args.previewEvery == 0 or
+                          i + 1 in (args.unimatchStart, args.epochs)))) if unimatch_enabled else None
             online_weight = pseudo_weight(i + 1, args) if online_enabled else 0.
             online_diagnostics = None
             if online_enabled and i + 1 >= args.onlineStart:
@@ -1190,6 +1204,7 @@ if __name__ == '__main__':
                 
                 inputs = image
                 training_target, training_sw = target, sw
+                pseudo_mask = torch.zeros_like(target, dtype=torch.bool) if unimatch_enabled else None
                 if online_diagnostics is not None:
                     teacher_probabilities = teacher.predict(inputs)
                     require_finite(teacher_probabilities, 'teacher training prediction', resDir,
@@ -1207,15 +1222,28 @@ if __name__ == '__main__':
                 if online_diagnostics is not None:
                     online_diagnostics.observe(j, target, pseudo_mask, teacher_probabilities,
                                                inputs, candidate_stats, loss.item())
-                    del teacher_probabilities, pseudo_mask
-                epoch_loss += loss.item()
+                    del teacher_probabilities
                 if batch_diagnostics is not None:
                     batch_diagnostics.observe(j, target, predict, image, loss.item())
                 
-                print(i,len(train_loader_train),j,epoch_loss/(j+1),loss.item())
-                
-                loss = loss/step_per_batches
-                loss.backward()
+                if unimatch_enabled:
+                    base_loss_value = loss.item()
+                    # Free each branch's saved activations before the next forward.
+                    (loss / step_per_batches).backward()
+                    um_stats, um_sample = backward_strong_views(
+                        net, inputs, target, pseudo_mask, online_weight, args,
+                        um_weight, step_per_batches, resDir, i + 1, j,
+                        capture=um_diagnostics.capture and um_diagnostics.sample is None)
+                    um_diagnostics.observe(base_loss_value, um_stats, um_sample)
+                    batch_loss_value = base_loss_value + um_stats['weighted_strong_loss']
+                    epoch_loss += batch_loss_value
+                    print(i,len(train_loader_train),j,epoch_loss/(j+1),batch_loss_value)
+                    del pseudo_mask
+                else:
+                    epoch_loss += loss.item()
+                    print(i,len(train_loader_train),j,epoch_loss/(j+1),loss.item())
+                    loss = loss/step_per_batches
+                    loss.backward()
                 
                 if j%step_per_batches ==0:
                     clip_finite_gradients(net, 0.1, resDir, epoch=i + 1, batch=j)
@@ -1405,6 +1433,8 @@ if __name__ == '__main__':
                                             training_state=best_checkpoints.state)
                 if online_diagnostics is not None:
                     online_diagnostics.write()
+                if um_diagnostics is not None:
+                    um_diagnostics.save()
                 if fixed_preview is not None:
                     batch_diagnostics.write(preview_dir, i + 1)
                     if (i + 1) % args.previewEvery == 0 or i + 1 == args.epochs:
