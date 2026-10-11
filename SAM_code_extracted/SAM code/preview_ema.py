@@ -35,8 +35,8 @@ def main():
     from torchUnet import conv_sam
     device = (f'cuda:{config.get("gpuIndex", 0)}' if torch.cuda.is_available()
               else 'mps' if torch.backends.mps.is_available() else 'cpu')
-    student = conv_sam(32, dropout=config['dropout'], isvit=config['modelType']=='mars_sam_vit',
-                       isalign=config['isalign']).to(device)
+    from sam2_lora import build_model
+    student = build_model(config).to(device)
     student.load_state_dict(state['student'])
     teacher = EMATeacher(student, config['emaDecay'])
     teacher.load_state_dict(state['teacher'])

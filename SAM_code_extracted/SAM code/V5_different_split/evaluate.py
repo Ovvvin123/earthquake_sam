@@ -34,8 +34,8 @@ if __name__ == '__main__':
     if not signature_file.exists(): signature_file = out.parent/'data_signature.json'
     if not signature_file.exists() or json.loads(signature_file.read_text())['sha256'] != signature:
         raise ValueError('Evaluation data differ from training dataset fingerprint')
-    net = conv_sam(32, dropout=0, isvit=False).to(device)
-    net.load_state_dict(torch.load(out/'model.pth', map_location=device, weights_only=True))
+    from sam2_lora import load_run_model
+    net = load_run_model(out, device)
     dataset = GridDataset(data/'faults.h5', (data/a.keyFile).read_text().split(), full=True)
     report = validate(net, dataset, device, a, FocalTversky, out/'val_qualitative.png')
     report['scope'] = 'within-region random validation; used for model selection; not independent test'

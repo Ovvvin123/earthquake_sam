@@ -173,8 +173,8 @@ def main():
         raise ValueError('Empty split or duplicate keys')
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     torch.manual_seed(0)
-    net = conv_sam(32, dropout=0., isvit=False, isalign=False).to(device)
-    net.load_state_dict(torch.load(args.model, map_location='cpu', weights_only=True), strict=True)
+    from sam2_lora import load_run_model
+    net = load_run_model(args.model, device)
     net.eval()
     print('device =', device, 'model =', args.model, flush=True)
     with File(data/'faults.h5', 'r') as h5:

@@ -81,7 +81,18 @@ parser.add_argument('--evalEverySteps', type=int, default=100)
 parser.add_argument('--seed', type=int, default=7)
 parser.add_argument('--device', default='auto')
 parser.add_argument('--resume', default='', help='grid_checkpoint.pth only; resumes optimizer and schedule')
+from sam2_lora import add_adaptation_arguments, adaptation_config
+add_adaptation_arguments(parser)
 args = parser.parse_args()
+try:
+    adaptation_config(args)
+except ValueError as error:
+    parser.error(str(error))
+if args.samAdaptation != 'full':
+    if args.modelType != 'mars_sam' or args.isalign:
+        parser.error('Frozen/LoRA requires mars_sam without isalign')
+    args.fixedVal = True
+
 if args.maxSteps < 1 or args.evalEverySteps < 1 or args.batchsize < 1 or args.stepPerMiniBatch < 1:
     parser.error('Step budget, evaluation interval, batch size and accumulation must be positive')
 if not (0 <= args.onlineStartStep <= args.onlineHoldStep < args.onlineRampStep):

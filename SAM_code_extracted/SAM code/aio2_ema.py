@@ -109,7 +109,9 @@ def save_ema_checkpoint(path, student, optimizer, teacher, next_epoch, config, t
     This deliberately preserves the existing gradient accumulation schedule.
     Configuration and RNG are stored using weights_only-compatible types.
     """
+    from sam2_lora import checkpoint_identity
     checkpoint = {
+        'identity': checkpoint_identity(config),
         'format': 'aio2_ema_v1', 'student': student.state_dict(),
         'optimizer': _plain_scalars(optimizer.state_dict()), 'teacher': teacher.state_dict(),
         'next_epoch': int(next_epoch), 'config': dict(config), 'rng': _rng_state(),
@@ -132,7 +134,12 @@ def load_ema_checkpoint(path, student, optimizer, teacher, config):
     ignored = {'epochs', 'resDir', 'emaResume', 'emaPreview', 'previewCount',
                'previewEvery', 'previewThreshold', 'previewBuffer', 'previewMinPixels'}
     ignored.update({'emaStageTransition', 'checkpointEvery'})
-    saved_config = checkpoint['config']
+    from sam2_lora import normalized_config
+    saved_config = normalized_config(checkpoint['config'])
+    config = normalized_config(config)
+    for key, value in {'seed': 0, 'resume': ''}.items():
+        saved_config.setdefault(key, value)
+        config.setdefault(key, value)
     transition = config.get('emaStageTransition', False)
     online_keys = {key for key in config.keys() | saved_config.keys() if key.startswith('online')}
     unimatch_keys = {key for key in config.keys() | saved_config.keys()
@@ -159,6 +166,8 @@ def load_ema_checkpoint(path, student, optimizer, teacher, config):
         default = False if key in {'fixedVal', 'onlineCorrection'} else None
         if saved_config.get(key, default) != config.get(key, default):
             raise ValueError(f'Resume configuration differs for {key!r}.')
+    from sam2_lora import check_checkpoint_identity
+    check_checkpoint_identity(checkpoint, config)
     student.load_state_dict(checkpoint['student'], strict=True)
     optimizer.load_state_dict(checkpoint['optimizer'])
     teacher.load_state_dict(checkpoint['teacher'])

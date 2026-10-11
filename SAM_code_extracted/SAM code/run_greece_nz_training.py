@@ -17,7 +17,16 @@ def main():
     ap.add_argument('--epochs',type=int,default=200)
     ap.add_argument('--d0',type=float,default=.01,help='k0 distance threshold; matches train_v5_unimatch_d001 by default')
     ap.add_argument('--execute',action='store_true')
+    from sam2_lora import add_adaptation_arguments, adaptation_config
+    add_adaptation_arguments(ap)
+    ap.add_argument('--trainingRecipe', choices=('supervised','unimatch'), default='unimatch')
+    ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--resume', type=Path, help='Full checkpoint matching the selected training recipe')
     args=ap.parse_args()
+    try:
+        adaptation_config(args)
+    except ValueError as error:
+        ap.error(str(error))
     data=args.data_dir.resolve();res=args.res_dir.resolve()
     if not (data/'manifest.json').is_file() or not (data/'faults.h5').is_file():
         ap.error('real dataset has not been built: supply the GEBCO paths to prepare_greece_nz.py first')
@@ -45,7 +54,9 @@ def main():
             ap.error('keys duplicated between splits or HDF5 keys disagree')
         if len([t for t in rows if t['split']=='train'])<2:
             ap.error('need at least two train tiles for batch size 2')
-    if res.exists() and any(res.iterdir()):
+    if args.resume and not args.resume.is_file():
+        ap.error('resume checkpoint does not exist')
+    if not args.resume and res.exists() and any(res.iterdir()):
         ap.error('use an empty result directory to protect prior runs')
     if args.epochs<1 or not 0<args.d0<.35:
         ap.error('invalid epochs/d0')
@@ -62,6 +73,13 @@ def main():
          '--onlineSupport','.5','--onlineBuffer','3','--onlineMinPixels','16','--onlineMaxFraction','.05',
          '--unimatch','--unimatchStart','41','--unimatchRampEnd','80','--unimatchWeight','.1',
          '--unimatchContrast','.2','--unimatchBrightness','.1','--unimatchNoise','.03']
+    if args.trainingRecipe == 'supervised':
+        cmd = cmd[:cmd.index('--emaTeacher')]
+    cmd += ['--seed', str(args.seed)]
+    for key, value in adaptation_config(args).items():
+        cmd += ['--'+key, str(value)]
+    if args.resume:
+        cmd += ['--emaResume' if args.trainingRecipe == 'unimatch' else '--resume', str(args.resume.resolve())]
     print(shlex.join(cmd),flush=True)
     if args.execute:
         # Match activate_wsl.sh used by the California UniMatch baseline.

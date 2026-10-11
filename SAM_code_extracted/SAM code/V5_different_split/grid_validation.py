@@ -19,7 +19,8 @@ def pixel_metrics(prob, truth):
         ap = float(np.sum(np.diff(np.r_[0., recall])*precision))
     return dict(AP=ap, threshold=.5, precision=tp/max(tp+fp, 1), recall=tp/max(tp+fn, 1),
                 F1=2*tp/max(2*tp+fp+fn, 1), IoU=tp/max(tp+fp+fn, 1),
-                valid_pixels=len(p), positive_pixels=int(y.sum()))
+                valid_pixels=len(p), positive_pixels=int(y.sum()),
+                prediction_mean=float(p.mean()), prediction_positive_fraction=float(pred.mean()))
 
 
 @torch.no_grad()

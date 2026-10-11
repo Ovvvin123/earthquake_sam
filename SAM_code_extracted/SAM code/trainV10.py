@@ -18,9 +18,9 @@ from matplotlib import cm
 from config import args,write_config
 
 
-torch.manual_seed(0)
-np.random.seed(0)
-random.seed(0)
+torch.manual_seed(args.seed)
+np.random.seed(args.seed)
+random.seed(args.seed)
 # PATCH (v6): derive the h5 from --dataset so any dataset dir works without
 # editing this file (e.g. --dataset earth_dataset_global/key_train.lst).
 _dsd = os.path.dirname(args.dataset)
@@ -957,8 +957,11 @@ if __name__ == '__main__':
     print('device =', device)
     
     
+    from sam2_lora import (optimizer_groups, training_mode, set_learning_rates,
+                           write_run_metadata, gradient_norms, read_model_config)
+    model_adaptation = vars(args) if args.job == 'train' else read_model_config(args.resDir)
     if args.modelType=='mars_sam':
-        net = conv_sam(32,dropout=args.dropout,isvit=False,isalign=args.isalign)
+        net = conv_sam(32,dropout=args.dropout,isvit=False,isalign=args.isalign,adaptation=model_adaptation)
     elif args.modelType=='mars_sam_vit':
         net = conv_sam(32,dropout=args.dropout,isvit=True,isalign=args.isalign)
     elif args.modelType=='mars_sam_re':
@@ -972,20 +975,7 @@ if __name__ == '__main__':
     
     step_per_batches = args.stepPerMiniBatch
     if args.modelType in ['mars_sam','mars_sam_vit']:
-        opt = torch.optim.AdamW(
-        [
-            {"params": net.not_sam.parameters(),'lr':args.lr0},
-            {"params": net.in_sam.parameters(),'lr':args.lr0/8}, 
-        ],
-            lr=args.lr0
-            )
-        optSGD = torch.optim.SGD(
-        [
-            {"params": net.not_sam.parameters(),'lr':args.lr0*10},
-            {"params": net.in_sam.parameters(),'lr':args.lr0}, 
-        ],
-            lr=args.lr0
-            )
+        opt = torch.optim.AdamW(optimizer_groups(net, args), lr=args.lr0)
     else:
         opt = torch.optim.AdamW(
         [
@@ -1058,6 +1048,10 @@ if __name__ == '__main__':
         os.makedirs(plotDir)
     if args.job=='train':
         from aio2_ema import EMATeacher, save_ema_checkpoint, load_ema_checkpoint
+        from sam2_lora import write_run_metadata, training_mode, set_learning_rates, gradient_norms
+        from training_checkpoint import save_supervised_checkpoint, load_supervised_checkpoint
+        import json
+        import time
         from training_numerics import require_finite, clip_finite_gradients
         calEnd = torch
         if args.lossFunc =='IoU':
@@ -1066,7 +1060,6 @@ if __name__ == '__main__':
             lossFunc = Dice
         elif args.lossFunc =='FocalTversky':
             lossFunc = FocalTversky
-        write_config(args)
         lr_mul = 1
         lr_mul0 =1
         
@@ -1076,9 +1069,15 @@ if __name__ == '__main__':
         opt.zero_grad()
         teacher = EMATeacher(net, decay=args.emaDecay) if args.emaTeacher else None
         start_epoch = 0
+        global_step = 0
+        resumed_state = None
+        if getattr(args, 'resume', ''):
+            start_epoch, global_step, resumed_state = load_supervised_checkpoint(
+                args.resume, net, opt, vars(args))
         if teacher is not None:
             if args.emaResume:
                 start_epoch = load_ema_checkpoint(args.emaResume, net, opt, teacher, vars(args))
+                global_step = teacher.num_updates
             teacher_dir = os.path.join(resDir, 'teacher')
             os.makedirs(teacher_dir, exist_ok=True)
             print(f'EMA teacher enabled: decay={teacher.decay}, '
@@ -1086,6 +1085,8 @@ if __name__ == '__main__':
             import json
             with open(os.path.join(resDir, 'ema_config.json'), 'w') as f:
                 json.dump(vars(args), f, indent=2)
+        write_config(args)
+        write_run_metadata(net, args, resDir)
         online_enabled = getattr(args, 'onlineCorrection', False)
         unimatch_enabled = getattr(args, 'unimatch', False)
         if unimatch_enabled:
@@ -1103,7 +1104,7 @@ if __name__ == '__main__':
         if fixed_validation_enabled:
             validation_signature = validation_manifest(train_loader_test, resDir)
             best_checkpoints = BestCheckpoints(
-                resDir, vars(args), getattr(teacher, 'resume_training_state', None),
+                resDir, vars(args), getattr(teacher, 'resume_training_state', None) if teacher else resumed_state,
                 signature=validation_signature)
             baseline_student, baseline_teacher = fixed_validation(
                 net, teacher, train_loader_test, device, args, lossFunc, d0, dw, alpha,
@@ -1126,6 +1127,7 @@ if __name__ == '__main__':
             print(f'Fixed preview enabled: {len(fixed_preview.samples)} training crops; preview candidates are not training labels')
         for i in range(start_epoch, args.epochs):   # total target epochs, also on resume
             epoch_loss=0
+            prediction_sum = positive_count = prediction_pixels = 0
             um_weight = consistency_weight(i + 1, args) if unimatch_enabled else 0.
             um_diagnostics = ConsistencyDiagnostics(
                 i + 1, um_weight, resDir,
@@ -1146,31 +1148,17 @@ if __name__ == '__main__':
             pu_now = 0.0
             if args.pu > 0 and i >= args.puWarmup:
                 pu_now = args.pu * min(1.0, (i - args.puWarmup + 1) / max(1, args.puRamp))
-            net.train()
-            net.in_sam.eval()
-            
-            if i==1:
-                #opt = optSGD
-                #lr_mul0 = 10
-                opt.param_groups[0]['lr']=args.lr0*lr_mul0/1
-                if args.modelType in ['mars_sam','mars_sam_vit']:
-                    opt.param_groups[1]['lr']=args.lr0*lr_mul0/8*lr_mul
-            if i==2:
-                opt.param_groups[0]['lr']=args.lr0*lr_mul0/2
-                if args.modelType in ['mars_sam','mars_sam_vit']:
-                    opt.param_groups[1]['lr']=args.lr0*lr_mul0/16*lr_mul
-            if i==4:
-                opt.param_groups[0]['lr']=args.lr0*lr_mul0/4
-                if args.modelType in ['mars_sam','mars_sam_vit']:
-                    opt.param_groups[1]['lr']=args.lr0*lr_mul0/32*lr_mul
-            if i==8:
-                opt.param_groups[0]['lr']=args.lr0*lr_mul0/8
-                if args.modelType in ['mars_sam','mars_sam_vit']:
-                    opt.param_groups[1]['lr']=args.lr0*lr_mul0/32*lr_mul
+            training_mode(net)
+            epoch_started = time.perf_counter()
+            if torch.device(device).type == 'cuda':
+                torch.cuda.reset_peak_memory_stats(device)
             for j, (image,target) in enumerate(train_loader_train):
-                if i==0:
-                    opt.param_groups[0]['lr']=args.lr0*(1-np.exp(-j/len(train_loader_train)*3))
-                    opt.param_groups[1]['lr']=args.lr0*(1-np.exp(-j/len(train_loader_train)*3))/8
+                # Preserve the legacy milestones, but never index an absent SAM group.
+                head_factor = 1. if i < 2 else .5 if i < 4 else .25 if i < 8 else .125
+                sam_factor = 1. if i < 2 else .5 if i < 4 else .25
+                if i == 0:
+                    head_factor = sam_factor = 1-np.exp(-j/len(train_loader_train)*3)
+                set_learning_rates(opt, args, head_factor, sam_factor)
                 if not isinstance(image,torch.Tensor):
                     image =torch.from_numpy(image).to(device)
                     target = torch.from_numpy(target).to(device)
@@ -1213,6 +1201,10 @@ if __name__ == '__main__':
                         target, sw, teacher_probabilities, inputs, online_weight, args)
                 predict = net(inputs)
                 require_finite(predict, 'student training prediction', resDir, epoch=i + 1, batch=j)
+                valid_prob = predict[:, 0].detach()[inputs[:, 2:4].amin(1) > .5]
+                prediction_sum += float(valid_prob.sum())
+                positive_count += int((valid_prob >= .5).sum())
+                prediction_pixels += valid_prob.numel()
                 require_finite(training_sw, 'training weights', resDir, epoch=i + 1, batch=j)
                 if args.lossFunc=='FocalTversky':
                     loss = lossFunc(training_target,predict,sw=training_sw,pu=pu_now)
@@ -1246,8 +1238,10 @@ if __name__ == '__main__':
                     loss.backward()
                 
                 if j%step_per_batches ==0:
+                    last_gradient_norms = gradient_norms(opt)
                     clip_finite_gradients(net, 0.1, resDir, epoch=i + 1, batch=j)
                     opt.step()
+                    global_step += 1
                     if teacher is not None:
                         teacher.update(net)
                     opt.zero_grad()
@@ -1431,6 +1425,17 @@ if __name__ == '__main__':
                         save_ema_checkpoint(os.path.join(stage_dir, f'epoch_{i + 1:04d}.pth'),
                                             net, opt, teacher, i + 1, vars(args),
                                             training_state=best_checkpoints.state)
+                if teacher is None:
+                    save_supervised_checkpoint(os.path.join(resDir, 'training_checkpoint.pth'),
+                        net, opt, i + 1, global_step, vars(args),
+                        best_checkpoints.state if best_checkpoints else None)
+                with open(os.path.join(resDir, 'adaptation_history.jsonl'), 'a') as stream:
+                    stream.write(json.dumps(dict(epoch=i + 1, global_step=global_step,
+                        learning_rates={g.get('name', str(k)): g['lr'] for k, g in enumerate(opt.param_groups)},
+                        gradient_norms=last_gradient_norms, epoch_seconds=time.perf_counter()-epoch_started,
+                        prediction_mean=prediction_sum/max(prediction_pixels, 1),
+                        prediction_positive_fraction=positive_count/max(prediction_pixels, 1),
+                        peak_cuda_bytes=torch.cuda.max_memory_allocated(device) if torch.device(device).type == 'cuda' else None))+'\n')
                 if online_diagnostics is not None:
                     online_diagnostics.write()
                 if um_diagnostics is not None:

@@ -68,7 +68,27 @@ parser.add_argument('--unimatchContrast', type=float, default=0.2, help='shared 
 parser.add_argument('--unimatchBrightness', type=float, default=0.1, help='display-channel brightness shift in normalized units')
 parser.add_argument('--unimatchNoise', type=float, default=0.03, help='shared display-channel Gaussian noise standard deviation')
 
+from sam2_lora import add_adaptation_arguments, adaptation_config
+add_adaptation_arguments(parser)
+parser.add_argument('--seed', type=int, default=0)
+parser.add_argument('--resume', default='', help='supervised training_checkpoint.pth')
 args = parser.parse_args()
+try:
+    adaptation_config(args)
+except ValueError as error:
+    parser.error(str(error))
+if args.samAdaptation != 'full':
+    if args.modelType != 'mars_sam' or args.isalign:
+        parser.error('Frozen/LoRA requires mars_sam without isalign')
+    args.fixedVal = True
+
+if args.resume and (args.emaTeacher or args.emaResume or args.job != 'train'):
+    parser.error('--resume is for supervised training; use --emaResume with EMA')
+if args.samAdaptation != 'full' and args.job == 'train':
+    from pathlib import Path
+    if not (args.resume or args.emaResume) and any((Path(args.resDir)/n).exists() for n in
+            ('model.pth', 'training_checkpoint.pth', 'ema_checkpoint.pth')):
+        parser.error('Use a new result directory or explicit resume')
 if args.unimatch:
     from pathlib import Path
     import os

@@ -266,7 +266,7 @@ class Clip(nn.Module):
         #x = 
         return torch.sigmoid(x)*(self.max_val-self.min_val)+self.min_val
 class conv_sam(nn.Module):
-    def __init__(self, ch, sam_build=sam2_model_build,head_num=4,dropout=0,in_Channel=7,out_Channel=3,mask_threshold=0.0,max_hole_area=0.0,max_sprinkle_area=0.0,n=256,m=256,reRandom=False,isvit=True,isalign=False):
+    def __init__(self, ch, sam_build=sam2_model_build,head_num=4,dropout=0,in_Channel=7,out_Channel=3,mask_threshold=0.0,max_hole_area=0.0,max_sprinkle_area=0.0,n=256,m=256,reRandom=False,isvit=True,isalign=False,adaptation=None):
         self.n = n
         self.m = m
         self.out_Channel = out_Channel
@@ -371,6 +371,9 @@ class conv_sam(nn.Module):
             self.in_sam.append(self.align)
         if self.isvit:
             self.in_sam.append(self.vit)
+        from sam2_lora import configure_sam
+        configure_sam(self, adaptation)
+
     def forward(self, x, feature_masks=None):
         if feature_masks is not None:
             return self._forward_with_feature_masks(x, feature_masks)

@@ -38,8 +38,10 @@ print(f"test tiles: {len(keys)}")
 
 dev = 'cuda:0' if torch.cuda.is_available() else ('mps' if getattr(torch.backends,'mps',None)
        and torch.backends.mps.is_available() else 'cpu')
-net = conv_sam(32, dropout=0., isvit=(args.modelType=='mars_sam_vit'), isalign=False).to(dev)
-net.load_state_dict(torch.load(f"{args.resDir}/model.pth", map_location=dev))
+from sam2_lora import load_run_model, read_model_config
+cfg = read_model_config(args.resDir)
+cfg.setdefault('modelType', args.modelType)
+net = load_run_model(args.resDir, dev, cfg)
 net.eval()
 
 def build_input_full(g):

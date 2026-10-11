@@ -79,8 +79,8 @@ def main():
     report['uniform_predictions']={str(p):float(FocalTversky(target,torch.full_like(target,p),sw=sw,pu=0))
                                    for p in [.1,.25,.5,.9,.99,1.]}
     device='cuda:0' if torch.cuda.is_available() else 'cpu'
-    net=conv_sam(32,dropout=0,isvit=False,isalign=False).to(device)
-    net.load_state_dict(torch.load(RUN/'best_student/model.pth',map_location='cpu',weights_only=True),strict=True)
+    from sam2_lora import load_run_model
+    net=load_run_model(RUN/'best_student/model.pth', device)
     net.eval();captured=[]
     handle=net.tail[-2].register_forward_hook(lambda m,i,o:captured.append(o.detach().cpu()))
     with torch.no_grad(): prediction=net(images.to(device)).cpu()

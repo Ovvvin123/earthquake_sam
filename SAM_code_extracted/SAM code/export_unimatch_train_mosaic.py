@@ -33,8 +33,8 @@ def main():
     torch.manual_seed(0)
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
     print('Device:', device, flush=True)
-    model = conv_sam(32, dropout=0., isvit=False, isalign=False).to(device)
-    model.load_state_dict(torch.load(model_path, map_location='cpu', weights_only=True), strict=True)
+    from sam2_lora import load_run_model
+    model = load_run_model(model_path, device)
     model.eval()
     output.mkdir(exist_ok=True)
     data_path = base / 'earth_dataset_v3/faults.h5'

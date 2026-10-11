@@ -135,8 +135,8 @@ def main():
     torch.set_num_threads(4);torch.manual_seed(0)
     device='cuda:0' if torch.cuda.is_available() else 'cpu'
     model_path=run/'best_student/model.pth'
-    net=conv_sam(32,dropout=0,isvit=False,isalign=False).to(device)
-    net.load_state_dict(torch.load(model_path,map_location='cpu',weights_only=True),strict=True);net.eval()
+    from sam2_lora import load_run_model
+    net=load_run_model(model_path, device)
     report=dict(model=str(model_path),model_sha256=sha(model_path),epoch=metadata['epoch'],d0=.01,threshold=.5,
                 threshold_selection='fixed in advance; not tuned on test',crop=256,windows_per_tile=9,
                 device=device,loss_provenance=losses,train_val_audit=audit,california_overlap_pairs=0,counts={},images=[],

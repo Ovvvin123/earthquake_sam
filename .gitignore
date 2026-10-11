@@ -38,6 +38,7 @@ slurm_*.out
 slurm_*.err
 wandb/
 runs/
+SAM_code_extracted/SAM code/lora_verification/
 
 # Redistributable papers should be linked from README instead of committed
 SAM_paper_SegmentAnything_2023.pdf
