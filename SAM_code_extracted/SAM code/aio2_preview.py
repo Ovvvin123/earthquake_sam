@@ -53,7 +53,7 @@ def _even(keys, count):
 
 class FixedPreview:
     def __init__(self, dataset_type, filename, keys, output_dir, n, m, d0,
-                 count=6, threshold=.7, buffer_px=2, min_pixels=8):
+                 count=6, threshold=.7, buffer_px=2, min_pixels=8, dataset_options=None):
         from h5py import File
         if count < 1 or not 0 < threshold < 1 or buffer_px < 0 or min_pixels < 1:
             raise ValueError('Invalid preview count, threshold, buffer or minimum area.')
@@ -73,23 +73,39 @@ class FixedPreview:
         chosen = _even(positive, (count + 1) // 2) + _even(empty, count // 2)
         chosen += _even([key for key in keys if key not in chosen], count - len(chosen))
         chosen = sorted(chosen)
-        dataset = dataset_type(filename, chosen, n=n, m=m, training=False, fixed_crop=True)
+        dataset_options = dataset_options or {}
+        self.masked = bool(dataset_options.get('supervision_key'))
+        if dataset_options.get('known_crop'):
+            chosen = _even(keys,count)
+        dataset = dataset_type(filename, chosen, n=n, m=m, training=False, fixed_crop=True,
+                               **dataset_options)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.threshold, self.buffer_px, self.min_pixels = threshold, buffer_px, min_pixels
         self.samples, descriptions = [], []
+        self.known_masks = {}
         for i, key in enumerate(chosen):
             image, distance = dataset[i]
             image = np.ascontiguousarray(image, dtype=np.float32)
             truth = np.ascontiguousarray(distance[0] < d0)
             valid = (image[2:4] > .5).all(axis=0) & np.isfinite(image).all(axis=0)
+            known = valid & (distance[3] > .5) if self.masked else valid
+            if self.masked:
+                truth = truth & known
+            self.known_masks[key] = known
             self.samples.append((key, torch.from_numpy(image[None].copy()), truth, valid))
             digest = hashlib.sha256(image.tobytes() + truth.tobytes() + valid.tobytes()).hexdigest()
+            if self.masked:
+                digest = hashlib.sha256((digest+hashlib.sha256(known.tobytes()).hexdigest()).encode()).hexdigest()
             descriptions.append({'key': key, 'sha256': digest,
                                  'positive_pixels': int(truth.sum()), 'valid_pixels': int(valid.sum())})
         manifest = {'crop': 'center; no augmentation', 'n': n, 'm': m, 'd0': d0,
                     'selection': 'fixed training crops, balanced by presence of original k0 label',
                     'samples': descriptions}
+        if self.masked:
+            manifest.update(supervision_key=dataset_options['supervision_key'],
+                            crop='fixed max-known; no augmentation' if dataset_options.get('known_crop') else manifest['crop'],
+                            selection='fixed training keys; labels restricted to known mask')
         path = self.output_dir / 'samples.json'
         if path.exists() and json.loads(path.read_text(encoding='utf-8')) != manifest:
             raise ValueError('Fixed preview samples changed. Use a new preview output directory.')
@@ -112,8 +128,10 @@ class FixedPreview:
                     tp = teacher.predict(inputs)[0, 0].detach().float().cpu().numpy()
                     if sp.shape != truth.shape or tp.shape != truth.shape:
                         raise ValueError('Prediction and fixed-crop label dimensions differ.')
+                    known = self.known_masks[key]
+                    candidate_valid = valid & ~known if self.masked else valid
                     raw, candidate, raw_count, candidate_count = candidate_masks(
-                        tp, truth, valid, self.threshold, self.buffer_px, self.min_pixels)
+                        tp, truth, candidate_valid, self.threshold, self.buffer_px, self.min_pixels)
                     record = {'key': key, 'valid_pixels': int(valid.sum()),
                               'original_positive_fraction': float(truth.mean()),
                               'valid_positive_fraction': float(truth[valid].mean()) if valid.any() else None,
@@ -124,9 +142,14 @@ class FixedPreview:
                               'filtered_components': candidate_count,
                               'candidate_fraction_valid': float(candidate.sum()/valid.sum()) if valid.any() else None}
                     records.append(record)
+                    if self.masked:
+                        record.update(known_pixels=int(known.sum()),
+                                      known_positive_fraction=float(truth[known].mean()) if known.any() else None,
+                                      student_known=probability_stats(sp,known,self.threshold),
+                                      teacher_known=probability_stats(tp,known,self.threshold))
                     stem = f'sample_{index:02d}'
                     np.savez_compressed(directory / f'{stem}.npz', student=sp, teacher=tp,
-                                        original_label=truth, valid=valid,
+                                        original_label=truth, valid=valid, label_known=known,
                                         raw_candidates=raw, filtered_candidates=candidate)
                     background = np.clip(cpu_image[0, 0].numpy() * .5 + .5, 0, 1)
                     fig = Figure(figsize=(13, 8), layout='constrained')
@@ -135,10 +158,11 @@ class FixedPreview:
                     axes[0, 0].imshow(background, cmap='gray', vmin=0, vmax=1)
                     axes[0, 0].set_title('Terrain (normalized CTX)')
                     overlay = np.zeros((*truth.shape, 4))
+                    if self.masked: overlay[~known] = (.5,.5,.5,.65)
                     overlay[truth] = (0, 1, .3, .85)
                     axes[0, 1].imshow(background, cmap='gray', vmin=0, vmax=1)
                     axes[0, 1].imshow(overlay)
-                    axes[0, 1].set_title('Original labels (green)')
+                    axes[0, 1].set_title('Known labels: green; unknown: gray' if self.masked else 'Original labels (green)')
                     im = axes[0, 2].imshow(np.ma.array(sp, mask=~valid), vmin=0, vmax=1, cmap='magma')
                     axes[0, 2].set_title('Student probability')
                     axes[1, 0].imshow(np.ma.array(tp, mask=~valid), vmin=0, vmax=1, cmap='magma')

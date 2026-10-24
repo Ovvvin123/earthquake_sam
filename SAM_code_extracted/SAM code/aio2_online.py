@@ -10,6 +10,8 @@ from scipy.ndimage import binary_dilation, label
 
 from aio2_preview import preserve_rng
 from training_numerics import require_finite
+from fault_losses import forward_for_loss, supervised_loss, supervision
+from fault_metrics import FaultMetrics
 
 
 def pseudo_weight(epoch, args):
@@ -35,6 +37,9 @@ def select_candidates(probability, original, valid, args):
     limit = int(valid.sum() * args.onlineMaxFraction)
     stats = dict(components=int(count), rejected_touching=0, rejected_size=0,
                  rejected_confidence=0, rejected_budget=0, accepted_components=0)
+    if getattr(args, 'collapseGuard', False) and valid.any() and support.sum() / valid.sum() > .99:
+        stats['rejected_budget'] = int(count)
+        return chosen, stats
     for component in range(1, count + 1):
         region = components == component
         if (region & exclusion).any():
@@ -68,6 +73,9 @@ def temporary_targets(original, sw, probabilities, image, weight, args):
         for index in range(len(original)):
             valid = ((image[index, 2:4] > .5).all(dim=0) &
                      torch.isfinite(image[index]).all(dim=0))
+            if getattr(args, 'supervisionKey', ''):
+                # Reviewed labels cannot be replaced by teacher predictions.
+                valid = valid & (sw[index, 0] <= 0)
             selected, stats = select_candidates(
                 probabilities[index, 0].detach().cpu().numpy(),
                 original[index, 0].detach().cpu().numpy() > .5,
@@ -80,7 +88,7 @@ def temporary_targets(original, sw, probabilities, image, weight, args):
     if not mask.any():
         return original, sw, mask, totals
     corrected = torch.where(mask, torch.ones_like(original), original)
-    weights = torch.where(mask, weight * sw.amax(dim=(-2, -1), keepdim=True), sw)
+    weights = torch.where(mask, weight * sw.amax(dim=(-2, -1), keepdim=True).clamp_min(1.), sw)
     return corrected, weights, mask, totals
 
 
@@ -143,10 +151,13 @@ class OnlineDiagnostics:
 
 
 @torch.no_grad()
-def fixed_validation(student, teacher, loader, device, args, loss_func, d0, dw, alpha, epoch=None):
+def fixed_validation(student, teacher, loader, device, args, loss_func, d0, dw, alpha, epoch=None, return_metrics=False):
     """Per-sample fixed-crop mean, original labels, valid pixels only, PU=0."""
     modes = [(module, module.training) for module in student.modules()]
     student_losses, teacher_losses = [], []
+    meters = {'student': FaultMetrics(), 'teacher': FaultMetrics()}
+    baselines = {'all_negative': [], 'all_positive': []}
+    unknown_samples = 0
     keys = list(getattr(getattr(loader, 'dataset', None), 'list', []))
     sample_number = 0
     output_dir = getattr(args, 'resDir', '.')
@@ -163,41 +174,46 @@ def fixed_validation(student, teacher, loader, device, args, loss_func, d0, dw, 
                     sample_number += 1
                     require_finite(image, 'validation input', output_dir, **context)
                     require_finite(distances[index:index+1], 'validation distances', output_dir, **context)
-                    target, others = distances[index:index+1, :2], distances[index:index+1, 2:]
-                    if args.k0Only:
-                        target = target[:, :1]
-                    nearest = target if args.swMode == 'single' else target.amin(dim=1, keepdim=True)
-                    sw = torch.exp(-nearest.square() / dw**2) * (1-alpha) + alpha
-                    if args.isOther:
-                        other_sw = torch.exp(-others.square() / dw**2) * (1-alpha) + alpha
-                        sw = torch.maximum(sw, other_sw.expand_as(sw))
-                    valid = ((image[:, 2:4] > .5).all(dim=1, keepdim=True) &
-                             torch.isfinite(image).all(dim=1, keepdim=True))
+                    target, sw, valid = supervision(image, distances[index:index+1], args, d0, dw, alpha)
                     if not valid.any():
                         raise ValueError('Fixed validation crop has no valid pixels; revise validation windows.')
-                    sw = torch.where(valid, sw, 0.)
-                    sw = sw / sw.mean().clamp_min(1e-12)
-                    target = (target < d0).float()
-                    kwargs = dict(sw=sw)
-                    if args.lossFunc == 'FocalTversky':
-                        kwargs['pu'] = 0.
+                    if not (sw > 0).any():
+                        unknown_samples += 1
+                        continue
                     require_finite(sw, 'validation weights', output_dir, **context)
-                    prediction = student(image)
+                    prediction, logits = forward_for_loss(student, image, args)
                     require_finite(prediction, 'student validation prediction', output_dir, **context)
-                    value = loss_func(target, prediction, **kwargs)
+                    value = supervised_loss(target, prediction, sw, args, loss_func, logits)
                     require_finite(value, 'student validation loss', output_dir, **context)
                     student_losses.append(float(value))
+                    meters['student'].observe(prediction, target, sw)
+                    for name, probability in [('all_negative', 0.), ('all_positive', 1.)]:
+                        constant = torch.full_like(prediction, probability)
+                        # Finite saturated logits for BCE; exact constants for legacy probability losses.
+                        constant_logits = torch.zeros_like(prediction)
+                        constant_logits[:, :1] = (20. if probability else -20.) + math.log(prediction.shape[1]-1)
+                        baselines[name].append(float(supervised_loss(
+                            target, constant, sw, args, loss_func, constant_logits)))
                     if teacher is not None:
-                        prediction = teacher.predict(image)
+                        prediction, logits = forward_for_loss(teacher, image, args, teacher=True)
                         require_finite(prediction, 'teacher validation prediction', output_dir, **context)
-                        value = loss_func(target, prediction, **kwargs)
+                        value = supervised_loss(target, prediction, sw, args, loss_func, logits)
                         require_finite(value, 'teacher validation loss', output_dir, **context)
                         teacher_losses.append(float(value))
+                        meters['teacher'].observe(prediction, target, sw)
     finally:
         for module, mode in modes:
             module.training = mode
     if not student_losses or not all(math.isfinite(v) for v in student_losses + teacher_losses):
         raise ValueError('Empty or non-finite fixed validation results.')
+    health = dict(student=meters['student'].report(),
+                  teacher=meters['teacher'].report() if teacher is not None else None,
+                  baseline_losses={k: sum(v)/len(v) for k, v in baselines.items()},
+                  baseline_note='BCE constants use binary logits +/-20; probability losses use exact 0/1',
+                  unknown_samples=unknown_samples,
+                  supervision='mask' if getattr(args, 'supervisionKey', '') else 'catalog_background_assumption')
+    if return_metrics:
+        return student_losses, teacher_losses, health
     return student_losses, teacher_losses
 
 
@@ -214,7 +230,10 @@ def validation_manifest(loader, output_dir):
                     digest.update(str((array.shape, array.dtype.str)).encode())
                     digest.update(np.ascontiguousarray(array).tobytes())
                 count += 1
-    report = dict(protocol='fixed_center_per_sample_loss_v1', samples=count,
+    protocol = ('fixed_max_known_per_sample_loss_v1' if
+                getattr(getattr(loader,'dataset',None),'known_crop',False) else
+                'fixed_center_per_sample_loss_v1')
+    report = dict(protocol=protocol, samples=count,
                   sha256=digest.hexdigest(),
                   keys=list(getattr(getattr(loader, 'dataset', None), 'list', [])))
     path = Path(output_dir) / 'validation_manifest.json'
@@ -232,13 +251,14 @@ class BestCheckpoints:
     def __init__(self, output_dir, config, state=None, signature=None):
         self.output_dir, self.config = Path(output_dir), dict(config)
         self.state = state or {'student': None, 'teacher': None,
-                               'metric': 'fixed_center_per_sample_loss_v1'}
+                               'metric': ('fixed_max_known_per_sample_loss_v1'
+                                          if config.get('knownCrop') else 'fixed_center_per_sample_loss_v1')}
         if signature is not None:
             if self.state.get('validation_signature', signature) != signature:
                 raise ValueError('Fixed validation data differs from the resumed checkpoint.')
             self.state['validation_signature'] = signature
 
-    def update(self, epoch, student_loss, teacher_loss, student, optimizer, teacher, baseline=False):
+    def update(self, epoch, student_loss, teacher_loss, student, optimizer, teacher, baseline=False, health=None):
         from aio2_ema import save_ema_checkpoint
         improved = []
         for name, value in {'student': student_loss, 'teacher': teacher_loss}.items():
@@ -246,6 +266,11 @@ class BestCheckpoints:
                 continue
             if not math.isfinite(value):
                 raise ValueError('Non-finite validation loss; refusing best checkpoint selection.')
+            if self.config.get('collapseGuard', False):
+                if health is None or health.get(name) is None:
+                    raise ValueError('Collapse guard requires validation health metrics')
+                if not health[name]['eligible']:
+                    continue
             previous = self.state[name]
             if previous is None or value < previous['loss']:
                 self.state[name] = dict(epoch=epoch, loss=value)
@@ -265,5 +290,5 @@ class BestCheckpoints:
         (self.output_dir / 'best_metrics.json').write_text(json.dumps(self.state, indent=2), encoding='utf-8')
         with (self.output_dir / 'fixed_val.jsonl').open('a', encoding='utf-8') as stream:
             stream.write(json.dumps(dict(epoch=epoch, baseline=baseline, student_loss=student_loss,
-                                         teacher_loss=teacher_loss)) + '\n')
+                                         teacher_loss=teacher_loss, health=health)) + '\n')
         return self.state

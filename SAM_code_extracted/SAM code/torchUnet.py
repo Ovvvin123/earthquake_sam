@@ -373,9 +373,13 @@ class conv_sam(nn.Module):
         from sam2_lora import configure_sam
         configure_sam(self, adaptation)
 
-    def forward(self, x, feature_masks=None):
+    def _output(self, features, return_logits=False):
+        logits = self.tail[1](self.tail[0](features))
+        return logits if return_logits else self.tail[2](logits)
+
+    def forward(self, x, feature_masks=None, return_logits=False):
         if feature_masks is not None:
-            return self._forward_with_feature_masks(x, feature_masks)
+            return self._forward_with_feature_masks(x, feature_masks, return_logits=return_logits)
         if self.isalign:
             x = self.align(x)
         h = self.head(x)
@@ -393,14 +397,14 @@ class conv_sam(nn.Module):
         sam_h2 = sam_h1+self.conv_sam_2(sam_h['backbone_fpn'][0])+self.conv2(h)
         sam_h = self.upblock2(sam_h2)
         h = self.conv3(h)+sam_h
-        return self.tail(h)
+        return self._output(h, return_logits=return_logits)
 
     def complementary_feature_channels(self):
         # Include the local high-resolution skip so it cannot bypass perturbation.
         return (self.conv_sam_0.out_channels, self.conv_sam_1.out_channels,
                 self.conv_sam_2.out_channels, self.conv3[0].out_channels)
 
-    def _forward_with_feature_masks(self, x, masks):
+    def _forward_with_feature_masks(self, x, masks, return_logits=False):
         if not self.training:
             raise ValueError('Feature masks are training-only; inference uses normal forward.')
         channels = self.complementary_feature_channels()
@@ -425,7 +429,7 @@ class conv_sam(nn.Module):
         decoded = self.upblock2(
             decoded + (self.conv_sam_2(sam_h['backbone_fpn'][0])
                        + self.conv2(h)) * masks[2])
-        return self.tail(self.conv3(h) * masks[3] + decoded)
+        return self._output(self.conv3(h) * masks[3] + decoded, return_logits=return_logits)
 
     @torch.no_grad()
     def OutputFeature(self, x):

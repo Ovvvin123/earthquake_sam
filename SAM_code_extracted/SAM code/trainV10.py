@@ -24,10 +24,12 @@ random.seed(args.seed)
 # PATCH (v6): derive the h5 from --dataset so any dataset dir works without
 # editing this file (e.g. --dataset earth_dataset_global/key_train.lst).
 _dsd = os.path.dirname(args.dataset)
-if _dsd and os.path.exists(os.path.join(_dsd, 'faults.h5')):
+if args.dataFile:
+    trainFile = args.dataFile
+elif _dsd and os.path.exists(os.path.join(_dsd, 'faults.h5')):
     trainFile = os.path.join(_dsd, 'faults.h5')
 else:
-    trainFile = 'earth_dataset_v3/faults.h5'
+    raise FileNotFoundError('Cannot locate faults.h5 beside --dataset; provide --dataFile explicitly')
 dataFile = 'earth_dataset/ca_offshore_faults.h5'
 #trainFile = '/H5/all_eqA_296_tomark_other.h5'
 
@@ -997,15 +999,29 @@ if __name__ == '__main__':
         _ktr = [k for k in open(_ftr).read().split('\n') if k]
         _kva = [k for k in open(_fva).read().split('\n') if k]
         print(f'SPATIAL split -> train {len(_ktr)}  val {len(_kva)}')
-        dataSetTrain = Generator_new(trainFile,_ktr+keyL_h5_added*32,m=m,n=n,training=True)
-        dataSetTest  = Generator_new(trainFile,_kva,m=m,n=n,training=True)
+        dataSetTrain = Generator_new(trainFile,_ktr+keyL_h5_added*32,m=m,n=n,training=True,supervision_key=args.supervisionKey)
+        dataSetTest  = Generator_new(trainFile,_kva,m=m,n=n,training=True,supervision_key=args.supervisionKey)
     else:
-        dataSetTrain = Generator_new(trainFile,keyL_h5[:len(keyL_h5)//10*9]+keyL_h5_added*32,m=m,n=n,training=True)
-        dataSetTest = Generator_new(trainFile,keyL_h5[len(keyL_h5)//10*9:],m=m,n=n,training=True)
+        dataSetTrain = Generator_new(trainFile,keyL_h5[:len(keyL_h5)//10*9]+keyL_h5_added*32,m=m,n=n,training=True,supervision_key=args.supervisionKey)
+        dataSetTest = Generator_new(trainFile,keyL_h5[len(keyL_h5)//10*9:],m=m,n=n,training=True,supervision_key=args.supervisionKey)
     
     if getattr(args, 'fixedVal', False):
         dataSetTest = Generator_new(trainFile, sorted(dataSetTest.list), m=m, n=n,
-                                    training=False, fixed_crop=True)
+                                   training=False, fixed_crop=True, supervision_key=args.supervisionKey)
+    if args.knownCrop:
+        dataSetTrain = Generator_new(trainFile, dataSetTrain.list, m=m, n=n, training=True,
+            supervision_key=args.supervisionKey, known_crop=True,
+            min_known_pixels=args.minKnownPixels, known_crop_stride=args.knownCropStride)
+        dataSetTest = Generator_new(trainFile, dataSetTest.list, m=m, n=n, training=False,
+            fixed_crop=True, supervision_key=args.supervisionKey, known_crop=True,
+            min_known_pixels=args.minKnownPixels, known_crop_stride=args.knownCropStride)
+        import json
+        os.makedirs(args.resDir, exist_ok=True)
+        with open(os.path.join(args.resDir,'known_crop_inventory.json'),'w') as stream:
+            json.dump({split:dict(keys=ds.list,excluded=ds.excluded_keys,windows=ds.crop_windows)
+                       for split,ds in [('train',dataSetTrain),('val',dataSetTest)]},stream,indent=2)
+        print(f'KNOWN crops: train={len(dataSetTrain)}, val={len(dataSetTest)}; '
+              'weighted known-area crop + D4 training; fixed max-known validation; no scale augmentation')
     train_loader_train = data_utils.DataLoader(dataSetTrain,
                                         batch_size=BatchSize,
                                         shuffle=True, drop_last=True, num_workers=0,collate_fn=collate_function,)  # PATCH: 0 workers (macOS spawn-safe)
@@ -1053,13 +1069,22 @@ if __name__ == '__main__':
         import json
         import time
         from training_numerics import require_finite, clip_finite_gradients
+        from fault_losses import (LOGIT_LOSSES, forward_for_loss, supervised_loss,
+                                  supervision, accumulation_window)
+        from fault_metrics import FaultMetrics
         calEnd = torch
+        lossFunc = None
         if args.lossFunc =='IoU':
             lossFunc = IoU
         elif args.lossFunc =='Dice':
             lossFunc = Dice
         elif args.lossFunc =='FocalTversky':
             lossFunc = FocalTversky
+        elif args.lossFunc not in LOGIT_LOSSES:
+            raise ValueError(f'Unknown loss: {args.lossFunc}')
+        if not getattr(args, 'supervisionKey', ''):
+            print('Supervision: catalog-background assumption. Unannotated valid pixels are treated as background; '
+                  'use --supervisionKey with a reviewed known-label mask for incomplete labels.')
         lr_mul = 1
         lr_mul0 =1
         
@@ -1106,13 +1131,13 @@ if __name__ == '__main__':
             best_checkpoints = BestCheckpoints(
                 resDir, vars(args), getattr(teacher, 'resume_training_state', None) if teacher else resumed_state,
                 signature=validation_signature)
-            baseline_student, baseline_teacher = fixed_validation(
+            baseline_student, baseline_teacher, validation_health = fixed_validation(
                 net, teacher, train_loader_test, device, args, lossFunc, d0, dw, alpha,
-                epoch=start_epoch)
+                epoch=start_epoch, return_metrics=True)
             best_checkpoints.update(
                 start_epoch, float(np.mean(baseline_student)),
                 float(np.mean(baseline_teacher)) if baseline_teacher else None,
-                net, opt, teacher, baseline=True)
+                net, opt, teacher, baseline=True, health=validation_health)
             print(f'Fixed validation baseline epoch={start_epoch}: '
                   f'student={np.mean(baseline_student):.6f}, '
                   f'teacher={np.mean(baseline_teacher) if baseline_teacher else float("nan"):.6f}')
@@ -1123,10 +1148,20 @@ if __name__ == '__main__':
             with preserve_rng():
                 fixed_preview = FixedPreview(
                     Generator_new, trainFile, dataSetTrain.list, preview_dir, n, m, d0,
-                    args.previewCount, args.previewThreshold, args.previewBuffer, args.previewMinPixels)
+                    args.previewCount, args.previewThreshold, args.previewBuffer, args.previewMinPixels,
+                    dataset_options=dict(supervision_key=getattr(args,'supervisionKey',''),
+                        known_crop=getattr(args,'knownCrop',False), min_known_pixels=getattr(args,'minKnownPixels',1),
+                        known_crop_stride=getattr(args,'knownCropStride',32)))
             print(f'Fixed preview enabled: {len(fixed_preview.samples)} training crops; preview candidates are not training labels')
         for i in range(start_epoch, args.epochs):   # total target epochs, also on resume
             epoch_loss=0
+            train_metrics = FaultMetrics()
+            last_gradient_norms = {}
+            window_has_signal = False
+            validation_health = None
+            accumulation_version = getattr(args, 'accumulationVersion', 'legacy_v1')
+            if accumulation_version == 'window_v2':
+                opt.zero_grad(set_to_none=True)
             prediction_sum = positive_count = prediction_pixels = 0
             um_weight = consistency_weight(i + 1, args) if unimatch_enabled else 0.
             um_diagnostics = ConsistencyDiagnostics(
@@ -1153,6 +1188,10 @@ if __name__ == '__main__':
             if torch.device(device).type == 'cuda':
                 torch.cuda.reset_peak_memory_stats(device)
             for j, (image,target) in enumerate(train_loader_train):
+                grad_divisor, should_step = accumulation_window(
+                    j, len(train_loader_train), step_per_batches, accumulation_version)
+                if accumulation_version == 'window_v2' and j % step_per_batches == 0:
+                    window_has_signal = False
                 # Preserve the legacy milestones, but never index an absent SAM group.
                 head_factor = 1. if i < 2 else .5 if i < 4 else .25 if i < 8 else .125
                 sam_factor = 1. if i < 2 else .5 if i < 4 else .25
@@ -1166,29 +1205,7 @@ if __name__ == '__main__':
                     #exit()
                 require_finite(image, 'training input', resDir, epoch=i + 1, batch=j)
                 require_finite(target, 'training distances', resDir, epoch=i + 1, batch=j)
-                #if args.isOther:
-                target,others =target[:,:2],target[:,2:]
-                if args.k0Only:
-                    target = target[:,:1]   # PATCH: focus all capacity on k0 (any fault)
-
-                if args.swMode=='single':
-                    tMin = target+0
-                else:
-                    tMin = target.min(dim=1,keepdim=True).values
-                sw = calEnd.exp(-tMin**2/dw**2)*(1-alpha)+alpha
-                
-                if args.isOther:
-                    sw_other = (calEnd.exp(-others**2/(dw)**2)*(1-alpha)+alpha)
-                    #print(sw_other.amax(),sw_other.shape)
-                    sw_other = sw_other.expand_as(sw)
-                    sw = torch.where(sw>sw_other,sw,sw_other)
-                
-                #print(tMin.dtype)
-                target = calEnd.where(target<d0,1.,0.)
-                valid_01 = image[:,2:4].amin(dim=1,keepdim=True)#.values
-                sw = calEnd.where(valid_01<1e-9,1,sw)
-                
-                sw = sw/sw.mean()
+                target, sw, valid = supervision(image, target, args, d0, dw, alpha)
                 
                 inputs = image
                 training_target, training_sw = target, sw
@@ -1199,17 +1216,16 @@ if __name__ == '__main__':
                                    epoch=i + 1, batch=j)
                     training_target, training_sw, pseudo_mask, candidate_stats = temporary_targets(
                         target, sw, teacher_probabilities, inputs, online_weight, args)
-                predict = net(inputs)
+                predict, logits = forward_for_loss(net, inputs, args)
                 require_finite(predict, 'student training prediction', resDir, epoch=i + 1, batch=j)
                 valid_prob = predict[:, 0].detach()[inputs[:, 2:4].amin(1) > .5]
                 prediction_sum += float(valid_prob.sum())
                 positive_count += int((valid_prob >= .5).sum())
                 prediction_pixels += valid_prob.numel()
                 require_finite(training_sw, 'training weights', resDir, epoch=i + 1, batch=j)
-                if args.lossFunc=='FocalTversky':
-                    loss = lossFunc(training_target,predict,sw=training_sw,pu=pu_now)
-                else:
-                    loss = lossFunc(training_target,predict,sw=training_sw)
+                loss = supervised_loss(training_target, predict, training_sw, args, lossFunc, logits, pu_now)
+                window_has_signal |= bool((training_sw > 0).any())
+                train_metrics.observe(predict, target, sw)
                 require_finite(loss, 'training loss', resDir, epoch=i + 1, batch=j)
                 if online_diagnostics is not None:
                     online_diagnostics.observe(j, target, pseudo_mask, teacher_probabilities,
@@ -1221,12 +1237,13 @@ if __name__ == '__main__':
                 if unimatch_enabled:
                     base_loss_value = loss.item()
                     # Free each branch's saved activations before the next forward.
-                    (loss / step_per_batches).backward()
+                    (loss / grad_divisor).backward()
                     um_stats, um_sample = backward_strong_views(
                         net, inputs, target, pseudo_mask, online_weight, args,
-                        um_weight, step_per_batches, resDir, i + 1, j,
+                        um_weight, grad_divisor, resDir, i + 1, j,
                         capture=um_diagnostics.capture and um_diagnostics.sample is None)
                     um_diagnostics.observe(base_loss_value, um_stats, um_sample)
+                    window_has_signal |= bool(um_stats['active'])
                     batch_loss_value = base_loss_value + um_stats['weighted_strong_loss']
                     epoch_loss += batch_loss_value
                     print(i,len(train_loader_train),j,epoch_loss/(j+1),batch_loss_value)
@@ -1234,10 +1251,13 @@ if __name__ == '__main__':
                 else:
                     epoch_loss += loss.item()
                     print(i,len(train_loader_train),j,epoch_loss/(j+1),loss.item())
-                    loss = loss/step_per_batches
+                    loss = loss/grad_divisor
                     loss.backward()
                 
-                if j%step_per_batches ==0:
+                if should_step:
+                    if accumulation_version == 'window_v2' and not window_has_signal:
+                        opt.zero_grad(set_to_none=True)
+                        continue  # no AdamW decay or EMA update from wholly unknown windows
                     last_gradient_norms = gradient_norms(opt)
                     clip_finite_gradients(net, 0.1, resDir, epoch=i + 1, batch=j)
                     opt.step()
@@ -1257,9 +1277,9 @@ if __name__ == '__main__':
                 lossL =[]
                 teacher_lossL = []
                 if fixed_validation_enabled:
-                    lossL, teacher_lossL = fixed_validation(
+                    lossL, teacher_lossL, validation_health = fixed_validation(
                         net, teacher, train_loader_test, device, args, lossFunc, d0, dw, alpha,
-                        epoch=i + 1)
+                        epoch=i + 1, return_metrics=True)
                 else:
                     for j, (image,target) in enumerate(train_loader_test):
                         #te[image<1/512]=999
@@ -1268,40 +1288,14 @@ if __name__ == '__main__':
                             image =torch.from_numpy(image).to(device)
                             target = torch.from_numpy(target).to(device)
                     
-                        target,others = target[:,:2],target[:,2:]
-                        if args.k0Only:
-                            target = target[:,:1]
-                        if args.swMode=='single':
-                            tMin = target+0
-                        else:
-                            tMin = target.min(dim=1,keepdim=True).values
-                        sw = calEnd.exp(-tMin**2/dw**2)*(1-alpha)+alpha
-                    
-                        if args.isOther:
-                            sw_other = (calEnd.exp(-others**2/(dw)**2)*(1-alpha)+alpha)
-                            #print(sw_other.amax(),sw_other.shape)
-                            sw_other = sw_other.expand_as(sw)
-                            sw = torch.where(sw>sw_other,sw,sw_other)
-                        
-                        target = calEnd.where(target<d0,1.,0.)
-                        valid_01 = image[:,2:4].min(dim=1,keepdim=True).values
-                        sw = calEnd.where(valid_01<1e-9,1,sw)
-                        sw = sw/sw.mean()
-                    
-                    
-                        outputs = net(image)
-                        if args.lossFunc=='FocalTversky':
-                            # pu=0 in validation: report the honest, undiscounted loss
-                            loss = lossFunc(target,outputs,sw=sw,pu=0.0).detach().cpu().item()
-                        else:
-                            loss = lossFunc(target,outputs,sw=sw).detach().cpu().item()
+                        target, sw, valid = supervision(image, target, args, d0, dw, alpha)
+                        sw_other = sw
+                        outputs, logits = forward_for_loss(net, image, args)
+                        loss = supervised_loss(target, outputs, sw, args, lossFunc, logits).item()
                         lossL.append(loss)
                         if teacher is not None:
-                            teacher_outputs = teacher.predict(image)
-                            if args.lossFunc == 'FocalTversky':
-                                teacher_loss = lossFunc(target, teacher_outputs, sw=sw, pu=0.0)
-                            else:
-                                teacher_loss = lossFunc(target, teacher_outputs, sw=sw)
+                            teacher_outputs, teacher_logits = forward_for_loss(teacher, image, args, teacher=True)
+                            teacher_loss = supervised_loss(target, teacher_outputs, sw, args, lossFunc, teacher_logits)
                             teacher_lossL.append(teacher_loss.item())
                             del teacher_outputs, teacher_loss
                         output_image = net.outputImage(image).detach().cpu().numpy()
@@ -1405,7 +1399,7 @@ if __name__ == '__main__':
                     best_checkpoints.update(
                         i + 1, float(np.mean(lossL)),
                         float(np.mean(teacher_lossL)) if teacher_lossL else None,
-                        net, opt, teacher)
+                        net, opt, teacher, health=validation_health)
                 torch.save(net.state_dict(), modelFile)
                 if teacher is not None:
                     teacher_val_loss = float(np.mean(teacher_lossL))
@@ -1431,6 +1425,7 @@ if __name__ == '__main__':
                         best_checkpoints.state if best_checkpoints else None)
                 with open(os.path.join(resDir, 'adaptation_history.jsonl'), 'a') as stream:
                     stream.write(json.dumps(dict(epoch=i + 1, global_step=global_step,
+                        supervision_metrics=train_metrics.report(), validation_health=validation_health,
                         learning_rates={g.get('name', str(k)): g['lr'] for k, g in enumerate(opt.param_groups)},
                         gradient_norms=last_gradient_norms, epoch_seconds=time.perf_counter()-epoch_started,
                         prediction_mean=prediction_sum/max(prediction_pixels, 1),

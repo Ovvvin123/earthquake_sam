@@ -83,6 +83,14 @@ def positive_consistency(prediction, weights):
     return -(w * p.clamp_min(torch.finfo(p.dtype).eps).log()).sum() / max(p.numel(), 1)
 
 
+def positive_consistency_logits(logits, weights):
+    from fault_losses import binary_fault_logit
+    z = binary_fault_logit(logits)
+    w = weights.detach().float()
+    selected = w > 0
+    return (w[selected] * torch.nn.functional.softplus(-z[selected])).sum() / max(int(selected.sum()), 1)
+
+
 def backward_strong_views(student, image, original, pseudo_mask, pseudo_weight,
                           args, weight, grad_divisor, output_dir, epoch, batch,
                           capture=False):
@@ -115,10 +123,15 @@ def backward_strong_views(student, image, original, pseudo_mask, pseudo_weight,
         strong = strong_view(image, args)
         require_finite(strong, 'strong view', output_dir,
                        epoch=epoch, batch=batch, view=view_index)
-        prediction = student(strong) if masks is None else student(strong, feature_masks=masks)
+        if getattr(args, 'consistencyLoss', 'probability') == 'logits':
+            logits = student(strong, feature_masks=masks, return_logits=True)
+            prediction = logits.softmax(1)
+            loss = positive_consistency_logits(logits, weights)
+        else:
+            prediction = student(strong) if masks is None else student(strong, feature_masks=masks)
+            loss = positive_consistency(prediction, weights)
         require_finite(prediction, 'strong prediction', output_dir,
                        epoch=epoch, batch=batch, view=view_index)
-        loss = positive_consistency(prediction, weights)
         require_finite(loss, 'strong consistency loss', output_dir,
                        epoch=epoch, batch=batch, view=view_index)
         (loss * (weight / (2 * grad_divisor))).backward()

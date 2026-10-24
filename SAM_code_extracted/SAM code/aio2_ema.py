@@ -44,8 +44,10 @@ class EMATeacher:
         self.model.eval()
 
     @torch.no_grad()
-    def predict(self, inputs):
+    def predict(self, inputs, return_logits=False):
         self.model.eval()
+        if return_logits:
+            return self.model(inputs, return_logits=True)
         return self.model(inputs)
 
     def state_dict(self):

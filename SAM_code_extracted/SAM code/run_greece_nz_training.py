@@ -7,6 +7,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
+import math
 from prepare_greece_nz import HERE, REGIONS, DEFAULT_DATA_DIR, overlap_audit
 
 
@@ -15,6 +16,13 @@ def main():
     ap.add_argument('--data-dir',type=Path,default=DEFAULT_DATA_DIR)
     ap.add_argument('--res-dir',type=Path,default=HERE/'train_greece_nz_stride64_unimatch_d001')
     ap.add_argument('--epochs',type=int,default=200)
+    ap.add_argument('--lossFunc', choices=('FocalTversky', 'BCEWithLogits', 'BCEFocalTversky'), default='FocalTversky')
+    ap.add_argument('--tverskyWeight', type=float, default=.5)
+    ap.add_argument('--lr0', type=float, default=1e-4)
+    ap.add_argument('--supervisionKey', default='')
+    ap.add_argument('--accumulationVersion', choices=('legacy_v1', 'window_v2'), default='window_v2')
+    ap.add_argument('--collapseGuard', action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument('--consistencyLoss', choices=('probability', 'logits'), default='probability')
     ap.add_argument('--d0',type=float,default=.01,help='k0 distance threshold; matches train_v5_unimatch_d001 by default')
     ap.add_argument('--execute',action='store_true')
     from sam2_lora import add_adaptation_arguments, adaptation_config
@@ -23,6 +31,8 @@ def main():
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--resume', type=Path, help='Full checkpoint matching the selected training recipe')
     args=ap.parse_args()
+    if not math.isfinite(args.lr0) or args.lr0 <= 0 or not math.isfinite(args.tverskyWeight) or args.tverskyWeight < 0:
+        ap.error('lr0 must be positive and tverskyWeight nonnegative; both must be finite')
     try:
         adaptation_config(args)
     except ValueError as error:
@@ -49,6 +59,13 @@ def main():
             for k in keys:
                 if k not in f or f[k].attrs['split']!=split:
                     ap.error(f'{k}: missing HDF5 data or split mismatch')
+                if args.supervisionKey:
+                    if args.supervisionKey not in f[k]:
+                        ap.error(f'{k}: missing supervision mask {args.supervisionKey}; prepare reviewed masks first')
+                    import numpy as np
+                    known = f[k][args.supervisionKey][:]
+                    if known.shape != f[k]['k0'].shape or not np.isin(known, [0, 1]).all():
+                        ap.error(f'{k}: supervision mask must be binary and match k0 shape')
             listed.extend(keys)
         if len(set(listed))!=len(listed) or set(listed)!=set(f):
             ap.error('keys duplicated between splits or HDF5 keys disagree')
@@ -63,8 +80,8 @@ def main():
     cmd=[sys.executable,str(HERE/'trainV10.py'),'--job','train','--modelType','mars_sam',
          '--dataset',str(data/'key_train.lst'),'--resDir',str(res)+'/',
          '--mn','256','--batchsize','2','--stepPerMiniBatch','4','--epochs',str(args.epochs),
-         '--lr0','1e-4','--d0',str(args.d0),'--dw','.08','--alpha','.1','--dropout','0',
-         '--lossFunc','FocalTversky','--k0Only','--pu','0','--fixedVal',
+         '--lr0',str(args.lr0),'--d0',str(args.d0),'--dw','.08','--alpha','.1','--dropout','0',
+         '--lossFunc',args.lossFunc,'--k0Only','--pu','0','--fixedVal',
          '--emaTeacher','--emaDecay','.98','--emaPreview',
          '--previewCount','6','--previewEvery','5','--previewThreshold','.7',
          '--previewBuffer','2','--previewMinPixels','8','--checkpointEvery','20',
@@ -75,6 +92,9 @@ def main():
          '--unimatchContrast','.2','--unimatchBrightness','.1','--unimatchNoise','.03']
     if args.trainingRecipe == 'supervised':
         cmd = cmd[:cmd.index('--emaTeacher')]
+    cmd += ['--tverskyWeight', str(args.tverskyWeight), '--supervisionKey', args.supervisionKey,
+            '--accumulationVersion', args.accumulationVersion, '--consistencyLoss', args.consistencyLoss,
+            '--collapseGuard' if args.collapseGuard else '--no-collapseGuard']
     cmd += ['--seed', str(args.seed)]
     for key, value in adaptation_config(args).items():
         cmd += ['--'+key, str(value)]

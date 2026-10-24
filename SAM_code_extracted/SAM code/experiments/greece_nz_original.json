@@ -1,0 +1,9 @@
+{
+  "extends": "common_bceft_lora_ema_unimatch.json",
+  "arguments": {
+    "dataset": "earth_dataset_greece_nz_stride64_v2/key_train.lst",
+    "dataFile": "earth_dataset_greece_nz_stride64_v2/faults.h5",
+    "resDir": "runs/greece_nz_bceft_lora8_ema_unimatch_seed7_r01",
+    "epochs": 200, "supervisionKey": ""
+  }
+}

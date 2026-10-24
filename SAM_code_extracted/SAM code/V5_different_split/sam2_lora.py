@@ -153,6 +153,13 @@ def gradient_norms(optimizer):
 def normalized_config(config):
     result = {k: str(v) if isinstance(v, Path) else v for k, v in config.items()}
     result.update(adaptation_config(config))
+    # Missing fields describe historical behavior, never silently opt old resumes in.
+    for key, value in dict(tverskyWeight=.5, accumulationVersion='legacy_v1',
+                           supervisionKey='', supervisionVersion='legacy_v1',
+                           collapseGuard=False, consistencyLoss='probability',
+                           dataFile='', knownCrop=False, minKnownPixels=1,
+                           knownCropStride=32).items():
+        result.setdefault(key, value)
     return result
 
 
@@ -176,6 +183,8 @@ def checkpoint_identity(config):
         data = Path(config['dataset']).parent
         paths.update({name: data/name for name in
                       ('faults.h5', 'key_train.lst', 'key_val.lst', 'manifest.json')})
+    if config.get('dataFile'):
+        paths['faults.h5'] = Path(config['dataFile'])
     result = {}
     for name, path in paths.items():
         if path.is_file():
@@ -208,7 +217,8 @@ def write_run_metadata(model, args, directory):
                   lora_parameters=lora, custom_trainable=trainable-base_trainable-lora,
                   injected_layers=getattr(model, 'lora_layers', []))
     report['source_sha256'] = {name: sha256_file(Path(__file__).parent/name)
-        for name in ('sam2_lora.py', 'torchUnet.py', 'trainV10.py', 'train_grid.py', 'config.py')
+        for name in ('sam2_lora.py', 'torchUnet.py', 'trainV10.py', 'train_grid.py', 'config.py',
+                     'fault_losses.py', 'fault_metrics.py', 'tool.py', 'known_crops.py', 'aio2_online.py', 'unimatch_fault.py')
         if (Path(__file__).parent/name).is_file()}
     base = Path(__file__).parent/'sam2_hiera_small.pt'
     if base.exists():

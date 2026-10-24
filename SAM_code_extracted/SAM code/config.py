@@ -18,6 +18,10 @@ parser.add_argument('--stepPerMiniBatch', default=8, type=int, help='batch size'
 parser.add_argument('--dropout', default=0, type=float, help='batch size')
 parser.add_argument('--threshold', default=0.5, type=float, help='batch size')
 parser.add_argument('--dataset', default='key.lst', type=str, help='batch size')
+parser.add_argument('--dataFile', default='', help='Explicit HDF5; invalid explicit paths never fall back')
+parser.add_argument('--knownCrop', action='store_true', help='Sample known-area windows; fixed max-known validation, no scale augmentation')
+parser.add_argument('--minKnownPixels', type=int, default=1)
+parser.add_argument('--knownCropStride', type=int, default=32)
 parser.add_argument('--datasetAdd', default='', type=str, help='batch size')
 parser.add_argument('--faultFile', default='data/20240311_f/tectonics_Compression.shp', type=str, help='batch size')
 parser.add_argument('--valueFile', default='/H5/all_eqA_296_predict_feature.h5', type=str, help='batch size')
@@ -25,7 +29,14 @@ parser.add_argument('--value', default='feature', type=str, help='batch size')
 parser.add_argument('--isalign', default=False, help='batch size', action='store_true')
 parser.add_argument('--isOther', default=False, help='batch size', action='store_true')
 parser.add_argument('--swMode', default='single', type=str, help='batch size')
-parser.add_argument('--lossFunc', default='Dice', type=str, help='Dice | IoU | FocalTversky')
+parser.add_argument('--lossFunc', default='Dice', choices=('Dice', 'IoU', 'FocalTversky', 'BCEWithLogits', 'BCEFocalTversky'))
+parser.add_argument('--tverskyWeight', type=float, default=.5)
+parser.add_argument('--accumulationVersion', choices=('legacy_v1', 'window_v2'), default='window_v2')
+parser.add_argument('--supervisionKey', default='', help='Optional HDF5 dataset per tile: binary known-label mask, 0=unknown, 1=supervised')
+parser.add_argument('--collapseGuard', action=argparse.BooleanOptionalAction, default=True,
+                    help='Reject exactly all-positive/all-negative validation predictions for best checkpoint selection')
+parser.add_argument('--consistencyLoss', choices=('probability', 'logits'), default='probability',
+                    help='Opt-in stable positive-only consistency; does not add pseudo negatives')
 parser.add_argument('--pu', default=0.0, type=float, help='PU discount strength 0..1 for unlabeled-but-confident pixels (FocalTversky only, 0=off)')
 parser.add_argument('--puWarmup', default=20, type=int, help='epochs of plain training before PU discount starts')
 parser.add_argument('--puRamp', default=20, type=int, help='epochs to linearly ramp PU discount to full strength')
@@ -73,6 +84,30 @@ add_adaptation_arguments(parser)
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--resume', default='', help='supervised training_checkpoint.pth')
 args = parser.parse_args()
+args.supervisionVersion = 'known_mask_v2'
+if args.knownCrop and not args.supervisionKey:
+    parser.error('--knownCrop requires --supervisionKey')
+if args.minKnownPixels < 1 or args.knownCropStride < 1:
+    parser.error('Known crop minimum and stride must be positive')
+if args.dataFile:
+    from pathlib import Path
+    if not Path(args.dataFile).is_file():
+        parser.error(f'Explicit dataFile does not exist: {args.dataFile}')
+if not np.isfinite(args.tverskyWeight) or args.tverskyWeight < 0:
+    parser.error('--tverskyWeight must be finite and nonnegative')
+if args.stepPerMiniBatch < 1:
+    parser.error('--stepPerMiniBatch must be positive')
+if args.lossFunc in ('BCEWithLogits', 'BCEFocalTversky'):
+    if not args.k0Only or args.modelType not in ('mars_sam', 'mars_sam_vit'):
+        parser.error('Logits losses require k0Only and a conv_sam model')
+    if args.pu != 0:
+        parser.error('Logits losses do not implement PU risk; use --pu 0')
+if args.supervisionKey:
+    if not args.k0Only:
+        parser.error('--supervisionKey requires --k0Only')
+    args.fixedVal = True
+if args.supervisionKey and args.consistencyLoss != 'logits' and args.unimatch:
+    parser.error('Masked UniMatch experiments require --consistencyLoss logits')
 try:
     adaptation_config(args)
 except ValueError as error:
@@ -97,8 +132,8 @@ if args.unimatch:
                                   ('ema_checkpoint.pth', 'model.pth', 'best_metrics.json')):
         parser.error('UniMatch output already contains a run; use --emaResume or a new --resDir')
     if not (args.onlineCorrection and args.emaTeacher and args.k0Only
-            and args.lossFunc == 'FocalTversky' and args.job == 'train'):
-        parser.error('--unimatch requires --onlineCorrection, --emaTeacher, --k0Only and FocalTversky training')
+            and args.lossFunc in ('FocalTversky', 'BCEWithLogits', 'BCEFocalTversky') and args.job == 'train'):
+        parser.error('--unimatch requires onlineCorrection, emaTeacher, k0Only and a fault supervision loss')
     if args.modelType != 'mars_sam' or args.isalign:
         parser.error('This UniMatch adaptation supports --modelType mars_sam without --isalign')
     if not (args.onlineStart <= args.unimatchStart <= args.unimatchRampEnd):
@@ -109,8 +144,8 @@ if args.unimatch:
                (args.unimatchContrast, args.unimatchBrightness, args.unimatchNoise)):
         parser.error('UniMatch augmentation strengths must be finite and in [0, 1]')
 if args.onlineCorrection:
-    if not (args.emaTeacher and args.k0Only and args.lossFunc == 'FocalTversky' and args.job == 'train'):
-        parser.error('--onlineCorrection requires training, --emaTeacher, --k0Only and FocalTversky')
+    if not (args.emaTeacher and args.k0Only and args.lossFunc in ('FocalTversky', 'BCEWithLogits', 'BCEFocalTversky') and args.job == 'train'):
+        parser.error('--onlineCorrection requires training, emaTeacher, k0Only and a fault supervision loss')
     if args.pu != 0:
         parser.error('This online correction experiment requires --pu 0; PU remains available when online correction is off')
     args.fixedVal = True

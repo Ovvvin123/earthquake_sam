@@ -851,10 +851,11 @@ class Generator(data_utils.Dataset):
             return image[:,::inter,::inter].transpose(0,2,1)+0,te[::inter,::inter].transpose()+0,tc[::inter,::inter].transpose()+0,scale[::inter,::inter].transpose()+0
 from scipy.ndimage import zoom
 class Generator_new(data_utils.Dataset):
-    def __init__ (self,filename,key_list,m=256,n=256,training=False,isOthers=False,fixed_crop=False):
+    def __init__ (self,filename,key_list,m=256,n=256,training=False,isOthers=False,fixed_crop=False,supervision_key='',known_crop=False,min_known_pixels=1,known_crop_stride=32):
         if fixed_crop and training:
             raise ValueError('fixed_crop requires training=False')
         self.fixed_crop = fixed_crop
+        self.supervision_key = supervision_key
         self.filename = filename
         #print(key_list)
         self.list = key_list
@@ -863,17 +864,34 @@ class Generator_new(data_utils.Dataset):
         self.training = training   
         self.isOthers = isOthers 
         self.dataD = {}
+        self.known_crop = known_crop
+        self.crop_windows = {}
+        self.excluded_keys = []
+        if known_crop:
+            from known_crops import crop_inventory
+            self.crop_windows, self.excluded_keys = crop_inventory(
+                filename,key_list,supervision_key,n,m,min_known_pixels,known_crop_stride)
+            self.list = [key for key in key_list if key in self.crop_windows]
+            if not self.list:
+                raise ValueError('No crops with effective known supervision')
     def __len__(self):
         return len(self.list)
     def __getitem__(self, index):
         index = self.list[index]
         if index in self.dataD:
-            CTX,mole,te,tc,valid_0,valid_1,TW,to = self.dataD[index]
+            CTX,mole,te,tc,valid_0,valid_1,TW,to,known = self.dataD[index]
         else:
             with File(self.filename,'r') as f:
                 CTX = f[index]['CTX'][:].astype(np.float32)
                 mole = f[index]['image'][:].astype(np.float32)
                 TW  = f[index]['TW'][:].astype(np.float32)
+                known = None
+                if self.supervision_key:
+                    if self.supervision_key not in f[index]:
+                        raise ValueError(f'{index}: missing supervision mask {self.supervision_key}')
+                    known = f[index][self.supervision_key][:].astype(np.float32)
+                    if known.shape != CTX.shape or not np.isin(known, [0, 1]).all():
+                        raise ValueError(f'{index}: supervision mask must be binary and match the image')
                 
                 valid_0 = np.where(CTX>-2147483647,1,0)
                 valid_1 = np.where(mole>-2147483647,1,0)
@@ -918,12 +936,14 @@ class Generator_new(data_utils.Dataset):
             # dataset (1000+ tiles, ~5 MB each decompressed) unbounded caching
             # would exhaust Mac unified memory. h5 re-reads are cheap.
             if len(self.dataD) < 600:
-                self.dataD[index] = CTX,mole,te,tc,valid_0,valid_1,TW,to
+                self.dataD[index] = CTX,mole,te,tc,valid_0,valid_1,TW,to,known
         #te[te<0]=999
         #tc[tc<0]=999
         
-        if self.training:
+        if self.training and not self.known_crop:
             scale = np.random.rand()*0.5+0.75
+            if known is not None:
+                known = zoom(known, scale, order=0)
             te = zoom(te.astype('float32'), scale, order=1)
             tc = zoom(tc.astype('float32'), scale, order=1)
             to = zoom(to.astype('float32'), scale, order=1)
@@ -994,7 +1014,10 @@ class Generator_new(data_utils.Dataset):
                 valid_1=transforms.RandomRotation([angle,angle], )(valid_1).squeeze(0).numpy()
                 TW = transforms.RandomRotation([angle,angle], )(TW).numpy()
             
-        if self.fixed_crop:
+        if self.known_crop:
+            from known_crops import choose_crop
+            i0,j0 = choose_crop(self.crop_windows[index],self.training)
+        elif self.fixed_crop:
             if CTX.shape[0] < self.n or CTX.shape[1] < self.m:
                 raise ValueError('Fixed crop is larger than the source tile')
             i0 = (CTX.shape[0] - self.n) // 2
@@ -1018,6 +1041,8 @@ class Generator_new(data_utils.Dataset):
             to[i0:i0+self.n,j0:j0+self.m][np.newaxis,:],
             ])
         label[label>=0.35] = 999
+        if known is not None:
+            label = np.concatenate([label, known[None, i0:i0+self.n, j0:j0+self.m]])
         # PATCH: full uniform D4 augmentation (8 symmetries of the square).
         # The old chain covered only 5/8 ops with skewed probabilities
         # (rot180 got 41%, rot90/rot270/anti-transpose were unreachable).
