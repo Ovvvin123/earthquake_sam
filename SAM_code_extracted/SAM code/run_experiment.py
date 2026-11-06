@@ -13,6 +13,7 @@ from pathlib import Path
 import shlex
 import subprocess
 import sys
+from training_sources import training_source_snapshot, verify_training_sources
 
 HERE=Path(__file__).resolve().parent
 
@@ -75,6 +76,10 @@ def inspect_data(args):
     import h5py
     import numpy as np
     from tool import Generator_new
+    if args.get('fullTile'):
+        from v7_dataset import FullTileGenerator as Generator_new
+    dimensions = str(args.get('mn', '256')).split(',')
+    n, m = int(dimensions[0]), int(dimensions[-1])
     from known_crops import crop_inventory
     directory=Path(args['dataset']).parent
     keys={s:(directory/f'key_{s}.lst').read_text().split() for s in ('train','val')}
@@ -96,7 +101,7 @@ def inspect_data(args):
     state=np.random.get_state(); np.random.seed(args['seed'])
     try:
         for split,listed in keys.items():
-            reader=Generator_new(args['dataFile'],listed,training=split=='train',
+            reader=Generator_new(args['dataFile'],listed,m=m,n=n,training=split=='train',
                 fixed_crop=split=='val',supervision_key=args.get('supervisionKey',''),
                 known_crop=args.get('knownCrop',False),
                 min_known_pixels=args.get('minKnownPixels',1),
@@ -104,7 +109,7 @@ def inspect_data(args):
             counts=[]
             for index in range(len(reader)):
                 image,label=reader[index]
-                if image.shape!=(7,256,256) or not np.isfinite(image).all() or not np.isfinite(label).all():
+                if image.shape!=(7,n,m) or not np.isfinite(image).all() or not np.isfinite(label).all():
                     raise ValueError('Nonfinite or malformed production-loader sample')
                 valid=(image[2:4]>.5).all(0)
                 if args.get('knownCrop'):
@@ -117,7 +122,9 @@ def inspect_data(args):
                 selected_keys=reader.list,excluded_keys=reader.excluded_keys,
                 minimum_sampled_known_pixels=min(counts) if counts else None,
                 crop_protocol=('known_weighted_D4' if split=='train' else 'fixed_max_known')
-                if args.get('knownCrop') else ('legacy_random_augmented' if split=='train' else 'fixed_center'))
+                if args.get('knownCrop') else
+                ('full_tile_D4' if split=='train' else 'full_tile_fixed') if args.get('fullTile') else
+                ('legacy_random_augmented' if split=='train' else 'fixed_center'))
     finally: np.random.set_state(state)
     if result['train']['selected_samples']<args['batchsize']:
         raise ValueError('Fewer training samples than one batch')
@@ -180,10 +187,7 @@ def execute_sequence(profiles, reports):
         try:
             if checkpoint_identity(args)!=report['identity']:
                 raise RuntimeError('Dataset or base weights changed after preflight')
-            sources={p.name:__import__('hashlib').sha256(p.read_bytes()).hexdigest()
-                     for p in HERE.glob('*.py')}
-            if sources!=report['source_sha256']:
-                raise RuntimeError('Training sources changed while queue was waiting')
+            verify_training_sources(HERE, report['source_sha256'])
             env=os.environ.copy();env.update(MPLBACKEND='Agg',OMP_NUM_THREADS='4',MKL_NUM_THREADS='4')
             with (folder/'console.log').open('x',encoding='utf-8') as log:
                 child=subprocess.Popen(command(args)[:1]+['-u']+command(args)[1:],
@@ -228,7 +232,8 @@ def main():
         data=inspect_data(args)
         report=dict(profile=str(path.resolve()),command=cmd,resolved_config=resolved,
                     data=data,identity=checkpoint_identity(args),
-                    source_sha256={p.name:sha256_file(p) for p in HERE.glob('*.py')})
+                    source_scope='trainV10_local_imports_v1',
+                    source_sha256=training_source_snapshot(HERE))
         reports.append(report)
         print('PASS',json.dumps({k:v for k,v in data.items() if k not in ('train','val')}),flush=True)
         print('SAMPLES',data['train']['selected_samples'],data['val']['selected_samples'],flush=True)

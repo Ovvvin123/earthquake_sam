@@ -14,7 +14,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from aio2_ema import EMATeacher, save_ema_checkpoint, load_ema_checkpoint
+from aio2_ema import EMATeacher, activate_ema, save_ema_checkpoint, load_ema_checkpoint
 
 
 ROOT = Path(__file__).resolve().parent
@@ -97,6 +97,72 @@ class EMATests(unittest.TestCase):
         for decay in [-0.1, 1.0, float('nan')]:
             with self.assertRaises(ValueError):
                 EMATeacher(TinyModel(), decay)
+
+    def test_delayed_activation_uses_current_student_at_exact_boundary(self):
+        student = TinyModel()
+        args = SimpleNamespace(emaTeacher=True, emaDecay=.98, emaStartEpoch=250)
+        teacher = None
+        for epoch in (1, 120, 249):
+            teacher = activate_ema(student, teacher, epoch, args)
+            self.assertIsNone(teacher)
+        with torch.no_grad():
+            student.head[0].weight.add_(3)
+        teacher = activate_ema(student, teacher, 250, args, global_step=4980)
+        self.assertEqual(teacher.num_updates, 0)
+        self.assertEqual(teacher.global_step, 4980)
+        for key, value in student.state_dict().items():
+            self.assertTrue(torch.equal(value, teacher.model.state_dict()[key]), key)
+        self.assertIs(activate_ema(student, teacher, 251, args), teacher)
+        args.emaTeacher = False
+        self.assertIsNone(activate_ema(student, None, 500, args))
+
+    def test_delayed_loop_warmup_and_active_resume_match_uninterrupted(self):
+        initial = TinyModel()
+        overrides = dict(emaStartEpoch=3, accumulationVersion='window_v2')
+        image = torch.ones(1, 7, 4, 4)
+        target = torch.full((1, 3, 4, 4), .3)
+        target[:, :, :2] = 0
+        batches = [(image.clone(), target.clone()) for _ in range(6)]
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            whole, whole_teacher = self._run_training(initial, root / 'whole', 4, arg_overrides=overrides, batches_override=batches)
+            warm, teacher = self._run_training(initial, root / 'split', 2, arg_overrides=overrides, batches_override=batches)
+            self.assertIsNone(teacher)
+            self.assertFalse((root / 'split/teacher').exists())
+            state = torch.load(root / 'split/ema_checkpoint.pth', weights_only=True)
+            self.assertIsNone(state['teacher'])
+            self.assertEqual(state['global_step'], 4)
+            pure, _ = self._run_training(initial, root / 'pure', 2, enabled=False,
+                                         arg_overrides={'accumulationVersion': 'window_v2'}, batches_override=batches)
+            for key, value in warm.state_dict().items():
+                self.assertTrue(torch.equal(value, pure.state_dict()[key]), key)
+            # Resume immediately before activation, then resume again after it.
+            self._run_training(initial, root / 'split', 3, arg_overrides=overrides,
+                               resume=str(root / 'split/ema_checkpoint.pth'), batches_override=batches)
+            resumed, resumed_teacher = self._run_training(
+                initial, root / 'split', 4, arg_overrides=overrides,
+                resume=str(root / 'split/ema_checkpoint.pth'), batches_override=batches)
+            self.assertEqual(whole_teacher.num_updates, 4)
+            self.assertEqual(resumed_teacher.num_updates, 4)
+            state = torch.load(root / 'split/ema_checkpoint.pth', weights_only=True)
+            self.assertEqual(state['global_step'], 8)
+            for key, value in whole.state_dict().items():
+                self.assertTrue(torch.equal(value, resumed.state_dict()[key]), key)
+            for key, value in whole_teacher.model.state_dict().items():
+                self.assertTrue(torch.equal(value, resumed_teacher.model.state_dict()[key]), key)
+
+    def test_delayed_teacher_feedback_schedule(self):
+        from aio2_online import pseudo_weight
+        from unimatch_fault import consistency_weight
+        args = SimpleNamespace(onlineStart=250, onlineHoldEnd=250, onlineRampEnd=350,
+                               onlineWeightStart=.05, onlineWeightMax=.2,
+                               unimatch=True, unimatchStart=250, unimatchRampEnd=350, unimatchWeight=.1)
+        self.assertEqual(pseudo_weight(249, args), 0)
+        self.assertEqual(consistency_weight(249, args), 0)
+        self.assertEqual(pseudo_weight(250, args), .05)
+        self.assertGreater(consistency_weight(250, args), 0)
+        self.assertAlmostEqual(pseudo_weight(350, args), .2)
+        self.assertAlmostEqual(consistency_weight(350, args), .1)
 
     def test_checkpoint_restores_rng_gradients_and_teacher(self):
         student = TinyModel()

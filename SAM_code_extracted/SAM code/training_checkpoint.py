@@ -26,6 +26,7 @@ def load_supervised_checkpoint(path, student, optimizer, config):
         raise ValueError('Use a supervised training_checkpoint.pth')
     current, saved = normalized_config(config), normalized_config(state['config'])
     ignored = {'epochs', 'resDir', 'resume', 'checkpointEvery'}
+    ignored.update({'backupDir', 'backupEvery', 'backupMilestones'})
     changed = [k for k in current.keys() | saved.keys()
                if k not in ignored and current.get(k) != saved.get(k)]
     if changed:

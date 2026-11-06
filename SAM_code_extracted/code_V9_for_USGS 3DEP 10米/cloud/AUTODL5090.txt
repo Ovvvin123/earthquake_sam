@@ -1,0 +1,36 @@
+AutoDL RTX 5090 部署入口
+
+适用镜像：Ubuntu 22.04 / Python 3.12 / PyTorch 2.8.0+cu128，
+匹配的 torchvision 0.23.0。GPU 为 RTX 5090 (sm_120)。
+用户已在基础镜像上通过 BF16 + 强制 FlashAttention 前向/反向小张量检查。
+这不代表完整模型、数据预检、长时间训练已经通过。
+
+1. 将 earthquake-v9-autodl5090.tar 上传到 /root/autodl-tmp。
+在终端运行：
+  cd /root/autodl-tmp
+  test ! -e earthquake-v9 && tar -xf earthquake-v9-autodl5090.tar
+  cd earthquake-v9
+  bash cloud/autodl5090.sh setup
+  bash cloud/autodl5090.sh check
+
+setup 和 check 都不会启动训练。本入口没有 train 子命令。
+不要在本镜像使用旧的 cloud/setup.sh，它要求 Python 3.10 / CUDA 12.6。
+
+setup 创建新的 .venv-autodl5090，借用镜像内 GPU 包，在 venv 中安装其他依赖。
+镜像中的 torch/torchvision/torchaudio/triton/NVIDIA 包版本被约束，不能被解析器升级。
+其余依赖有版本范围约束；安装结束保存完整的运行时依赖闭包和精确版本，
+check 会拒绝版本漂移。这是新环境的安装快照，不冒充本地旧环境验证结果。
+不要修改基础镜像的 Python 环境，否则继承的依赖可能变化，预检将失败。
+setup 失败后不会自动删除半成品环境；排查后使用新的 V9_VENV 路径重试。
+更换 V9_VENV 时 setup 和 check 两次都应传入相同值。
+
+check 保留 SAM2 源码校验、数据和权重 SHA-256 校验、split 检查、
+严格 FlashAttention、1024px 模型推理，以及原启动器的数据预检查。
+报告保存在 cloud_checks。数据在 data/Earth_dataset_v7，权重在项目根目录。
+该数据集是现有的 30 米 V7 数据，不因代码来源目录名带“10米”而变成 10 米数据。
+当前候选配置为 batch4/累积2，有效 batch 仍为8；尚需在云端验证 batch4。
+学习率调度与本地 V9 一致：10轮预热，保持到100轮，余弦衰减到500轮，最低系数0.125。
+更改物理 batch 后不能假定逐步数值结果与 batch1/累积8 完全相同。
+
+预检通过后还需做完整模型的受限反向/显存检查，再确定正式训练命令。
+数据盘停机、释放后的保留规则以当前平台显示为准；正式训练产物需另行备份。

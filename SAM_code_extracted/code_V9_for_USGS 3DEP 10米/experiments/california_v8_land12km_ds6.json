@@ -1,0 +1,16 @@
+{
+  "extends": "common_bceft_lora_ema_unimatch.json",
+  "arguments": {
+    "dataset": "earth_dataset_V6/key_train.lst",
+    "dataFile": "earth_dataset_V6/faults.h5",
+    "resDir": "/home/ovvvin/earthquake-sam-results/runs/v8_california_ds6_land12km_bceft_lora8_ema_unimatch_seed7_r03",
+    "epochs": 500,
+    "supervisionKey": "label_known",
+    "emaStartEpoch": 250,
+    "onlineStart": 250,
+    "onlineHoldEnd": 250,
+    "onlineRampEnd": 350,
+    "unimatchStart": 250,
+    "unimatchRampEnd": 350
+  }
+}

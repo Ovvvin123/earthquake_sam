@@ -1,0 +1,33 @@
+{
+  "data": {
+    "faults.h5": {
+      "bytes": 3367534951,
+      "sha256": "53ee8240f66842a45f8cb541e2cd6c624cfa4147043f510f47ec4faecb9ce920"
+    },
+    "key_train.lst": {
+      "bytes": 2404,
+      "sha256": "124ce78f5a72bcb6a25eb0ef2a75694260e236d5bea1df37689abb1b2b2ba777"
+    },
+    "key_val.lst": {
+      "bytes": 520,
+      "sha256": "043f3138d59efdff53f9db5774222c8717ec17e0121f400af6c55b9a26800bfd"
+    },
+    "key_test.lst": {
+      "bytes": 1635,
+      "sha256": "45092f08b1ec3117a9000708ee1aa8901523768838d59b7ee9bd3920f0910937"
+    },
+    "manifest.json": {
+      "bytes": 250741,
+      "sha256": "2d3552d34796ed5770fba53cabad9b09f707364e0b364fe1c7ed934c95afb688"
+    }
+  },
+  "weights": {
+    "sam2_hiera_small.pt": {
+      "bytes": 184309650,
+      "sha256": "95949964d4e548409021d47b22712d5f1abf2564cc0c3c765ba599a24ac7dce3"
+    }
+  },
+  "dataset": "Earth_dataset_v7",
+  "resolution_m": 30,
+  "tile_size": 1024
+}

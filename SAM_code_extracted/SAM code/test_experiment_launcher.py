@@ -85,7 +85,7 @@ class ExperimentTests(unittest.TestCase):
             root=Path(folder)
             profiles=[dict(resDir=str(root/f'run{i}'),dataFile=str(root/'data/faults.h5')) for i in range(2)]
             from sam2_lora import sha256_file
-            reports=[dict(identity={},source_sha256={p.name:sha256_file(p) for p in launcher.HERE.glob('*.py')})]*2
+            reports=[dict(identity={},source_sha256=launcher.training_source_snapshot(launcher.HERE))]*2
             child=Mock(pid=123);child.wait.return_value=1
             with patch('sam2_lora.checkpoint_identity',return_value={}),patch.object(launcher.subprocess,'Popen',return_value=child) as popen:
                 with self.assertRaises(RuntimeError):launcher.execute_sequence(profiles,reports)
@@ -114,7 +114,7 @@ class ExperimentTests(unittest.TestCase):
             with TemporaryDirectory() as folder:
                 root=Path(folder)
                 profiles=[dict(resDir=str(root/f'run{i}'),dataFile=str(root/'data/faults.h5')) for i in range(2)]
-                reports=[dict(identity={},source_sha256={p.name:sha256_file(p) for p in launcher.HERE.glob('*.py')})]*2
+                reports=[dict(identity={},source_sha256=launcher.training_source_snapshot(launcher.HERE))]*2
                 events=[]
                 def spawn(*args,**kwargs):
                     events.append('launch');child=Mock(pid=123);child.wait.return_value=0;return child

@@ -1,0 +1,21 @@
+{
+  "extends": "california_v9_30m_1024_8gb.json",
+  "arguments": {
+    "resDir": "/home/ovvvin/earthquake-sam-results/runs/v9_30m_1024_bf16_flash_lora8_ema250_350_600ep_seed7_r01",
+    "batchsize": 1,
+    "stepPerMiniBatch": 8,
+    "lr0": 0.0002,
+    "loraLr": 0.0001,
+    "d0": 0.005,
+    "epochs": 600,
+    "lrDecayEnd": 600,
+    "emaStartEpoch": 250,
+    "onlineStart": 250,
+    "onlineHoldEnd": 250,
+    "onlineRampEnd": 350,
+    "unimatchStart": 250,
+    "unimatchRampEnd": 350,
+    "backupDir": "/mnt/f/Study————————/UCLA/Earthquake-SAM_交接/training_backups/v9_30m_1024_bf16_flash_lora8_ema250_350_600ep_seed7_r01",
+    "backupMilestones": "249,350,500,600"
+  }
+}

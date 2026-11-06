@@ -16,6 +16,8 @@ from scipy.signal import resample
 from scipy import fft
 from matplotlib import cm
 from config import args,write_config
+if args.fullTile:
+    from v7_dataset import FullTileGenerator as Generator_new
 
 
 torch.manual_seed(args.seed)
@@ -963,7 +965,7 @@ if __name__ == '__main__':
                            write_run_metadata, gradient_norms, read_model_config)
     model_adaptation = vars(args) if args.job == 'train' else read_model_config(args.resDir)
     if args.modelType=='mars_sam':
-        net = conv_sam(32,dropout=args.dropout,isvit=False,isalign=args.isalign,adaptation=model_adaptation)
+        net = conv_sam(32,dropout=args.dropout,isvit=False,isalign=args.isalign,adaptation=model_adaptation,n=n,m=m)
     elif args.modelType=='mars_sam_vit':
         net = conv_sam(32,dropout=args.dropout,isvit=True,isalign=args.isalign)
     elif args.modelType=='mars_sam_re':
@@ -1063,7 +1065,7 @@ if __name__ == '__main__':
     if not os.path.exists(plotDir):
         os.makedirs(plotDir)
     if args.job=='train':
-        from aio2_ema import EMATeacher, save_ema_checkpoint, load_ema_checkpoint
+        from aio2_ema import activate_ema, restore_ema_run, save_ema_checkpoint
         from sam2_lora import write_run_metadata, training_mode, set_learning_rates, gradient_norms
         from training_checkpoint import save_supervised_checkpoint, load_supervised_checkpoint
         import json
@@ -1072,6 +1074,9 @@ if __name__ == '__main__':
         from fault_losses import (LOGIT_LOSSES, forward_for_loss, supervised_loss,
                                   supervision, accumulation_window)
         from fault_metrics import FaultMetrics
+        from contextlib import nullcontext
+        from aio2_preview import preserve_rng
+        import hashlib
         calEnd = torch
         lossFunc = None
         if args.lossFunc =='IoU':
@@ -1092,21 +1097,25 @@ if __name__ == '__main__':
         with open(f'{resDir}parameters.txt','a') as f:
             f.write(f'{count_parameters_all} {count_parameters_train}\n')
         opt.zero_grad()
-        teacher = EMATeacher(net, decay=args.emaDecay) if args.emaTeacher else None
+        teacher = None
         start_epoch = 0
         global_step = 0
         resumed_state = None
         if getattr(args, 'resume', ''):
             start_epoch, global_step, resumed_state = load_supervised_checkpoint(
                 args.resume, net, opt, vars(args))
+        if args.emaTeacher and args.emaResume:
+            teacher, start_epoch, global_step, resumed_state = restore_ema_run(
+                args.emaResume, net, opt, vars(args))
+        teacher = activate_ema(net, teacher, start_epoch + 1, args, global_step)
+        teacher_dir = os.path.join(resDir, 'teacher')
         if teacher is not None:
-            if args.emaResume:
-                start_epoch = load_ema_checkpoint(args.emaResume, net, opt, teacher, vars(args))
-                global_step = teacher.num_updates
-            teacher_dir = os.path.join(resDir, 'teacher')
             os.makedirs(teacher_dir, exist_ok=True)
             print(f'EMA teacher enabled: decay={teacher.decay}, '
                   f'updates={teacher.num_updates}, next_epoch={start_epoch + 1}')
+        elif args.emaTeacher:
+            print(f'EMA teacher pending: activation epoch={args.emaStartEpoch}; no teacher allocated or updated')
+        if args.emaTeacher:
             import json
             with open(os.path.join(resDir, 'ema_config.json'), 'w') as f:
                 json.dump(vars(args), f, indent=2)
@@ -1154,7 +1163,13 @@ if __name__ == '__main__':
                         known_crop_stride=getattr(args,'knownCropStride',32)))
             print(f'Fixed preview enabled: {len(fixed_preview.samples)} training crops; preview candidates are not training labels')
         for i in range(start_epoch, args.epochs):   # total target epochs, also on resume
+            previous_teacher = teacher
+            teacher = activate_ema(net, teacher, i + 1, args, global_step)
+            if previous_teacher is None and teacher is not None:
+                os.makedirs(teacher_dir, exist_ok=True)
+                print(f'EMA teacher initialized from current student at epoch={i + 1}; global_step={global_step}')
             epoch_loss=0
+            input_digest = hashlib.sha256() if getattr(args, 'emaFeedbackFork', '') else None
             train_metrics = FaultMetrics()
             last_gradient_norms = {}
             window_has_signal = False
@@ -1188,6 +1203,10 @@ if __name__ == '__main__':
             if torch.device(device).type == 'cuda':
                 torch.cuda.reset_peak_memory_stats(device)
             for j, (image,target) in enumerate(train_loader_train):
+                if input_digest is not None:
+                    for value in (image, target):
+                        array = value.detach().cpu().numpy() if isinstance(value, torch.Tensor) else np.asarray(value)
+                        input_digest.update(np.ascontiguousarray(array).tobytes())
                 grad_divisor, should_step = accumulation_window(
                     j, len(train_loader_train), step_per_batches, accumulation_version)
                 if accumulation_version == 'window_v2' and j % step_per_batches == 0:
@@ -1238,10 +1257,15 @@ if __name__ == '__main__':
                     base_loss_value = loss.item()
                     # Free each branch's saved activations before the next forward.
                     (loss / grad_divisor).backward()
-                    um_stats, um_sample = backward_strong_views(
-                        net, inputs, target, pseudo_mask, online_weight, args,
-                        um_weight, grad_divisor, resDir, i + 1, j,
-                        capture=um_diagnostics.capture and um_diagnostics.sample is None)
+                    # Paired forks isolate auxiliary RNG consumption so disabling
+                    # strong views cannot change later sample orders/crops.
+                    with preserve_rng() if getattr(args, 'emaFeedbackFork', '') else nullcontext():
+                        if getattr(args, 'emaFeedbackFork', ''):
+                            torch.manual_seed((args.seed + 1000003 * (i + 1) + j) % (2**63 - 1))
+                        um_stats, um_sample = backward_strong_views(
+                            net, inputs, target, pseudo_mask, online_weight, args,
+                            um_weight, grad_divisor, resDir, i + 1, j,
+                            capture=um_diagnostics.capture and um_diagnostics.sample is None)
                     um_diagnostics.observe(base_loss_value, um_stats, um_sample)
                     window_has_signal |= bool(um_stats['active'])
                     batch_loss_value = base_loss_value + um_stats['weighted_strong_loss']
@@ -1264,6 +1288,7 @@ if __name__ == '__main__':
                     global_step += 1
                     if teacher is not None:
                         teacher.update(net)
+                        teacher.global_step = global_step
                     opt.zero_grad()
                     #scheduler.step()
                     pass
@@ -1409,22 +1434,27 @@ if __name__ == '__main__':
                         f.write(f'{i} {teacher.num_updates} {teacher_val_loss}\n')
                     # Existing evaluate.py can read this directory directly.
                     torch.save(teacher.model.state_dict(), os.path.join(teacher_dir, 'model.pth'))
+                if args.emaTeacher:
                     save_ema_checkpoint(os.path.join(resDir, 'ema_checkpoint.pth'),
                                         net, opt, teacher, i + 1, vars(args),
-                                        training_state=best_checkpoints.state if best_checkpoints else None)
+                                        training_state=best_checkpoints.state if best_checkpoints else None,
+                                        global_step=global_step)
                     checkpoint_every = getattr(args, 'checkpointEvery', 20)
                     if best_checkpoints is not None and checkpoint_every and (i + 1) % checkpoint_every == 0:
                         stage_dir = os.path.join(resDir, 'checkpoints')
                         os.makedirs(stage_dir, exist_ok=True)
                         save_ema_checkpoint(os.path.join(stage_dir, f'epoch_{i + 1:04d}.pth'),
                                             net, opt, teacher, i + 1, vars(args),
-                                            training_state=best_checkpoints.state)
-                if teacher is None:
+                                            training_state=best_checkpoints.state, global_step=global_step)
+                if not args.emaTeacher:
                     save_supervised_checkpoint(os.path.join(resDir, 'training_checkpoint.pth'),
                         net, opt, i + 1, global_step, vars(args),
                         best_checkpoints.state if best_checkpoints else None)
                 with open(os.path.join(resDir, 'adaptation_history.jsonl'), 'a') as stream:
                     stream.write(json.dumps(dict(epoch=i + 1, global_step=global_step,
+                        teacher_active=teacher is not None,
+                        teacher_updates=teacher.num_updates if teacher is not None else 0,
+                        input_sha256=input_digest.hexdigest() if input_digest is not None else None,
                         supervision_metrics=train_metrics.report(), validation_health=validation_health,
                         learning_rates={g.get('name', str(k)): g['lr'] for k, g in enumerate(opt.param_groups)},
                         gradient_norms=last_gradient_norms, epoch_seconds=time.perf_counter()-epoch_started,
@@ -1441,6 +1471,10 @@ if __name__ == '__main__':
                         with preserve_rng():
                             preview_path = fixed_preview.write(net, teacher, i + 1)
                         print(f'Fixed preview saved: {preview_path}')
+                # Synchronous epoch-end copy: all writers above have closed their files.
+                # The next epoch cannot overwrite the source while this copy is running.
+                from epoch_backup import backup_epoch
+                backup_epoch(resDir, i + 1, vars(args))
     keyL =['tectonics_Extention','tectonics_Compression']
     if  args.job=='predict_test' :
         from PIL import Image

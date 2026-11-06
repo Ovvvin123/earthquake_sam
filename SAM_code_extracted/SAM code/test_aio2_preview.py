@@ -127,6 +127,28 @@ class PreviewTests(unittest.TestCase):
                 FixedPreview(dataset_class(), path, keys, Path(directory) / 'preview',
                              4, 4, .02, count=3)
 
+    def test_actual_warmup_preview_without_teacher(self):
+        with TemporaryDirectory() as directory:
+            path = str(Path(directory) / 'data.h5')
+            keys = make_data(path)
+            runner = ema_tests.EMATests()
+            student, teacher = runner._run_training(
+                ema_tests.TinyModel(), Path(directory) / 'warmup', 1,
+                preview_data=dict(dataset_type=dataset_class(), filename=path, keys=keys),
+                arg_overrides={'emaStartEpoch': 3})
+            self.assertIsNone(teacher)
+            output = Path(directory) / 'warmup/preview/epoch_0001'
+            report = json.loads((output / 'metrics.json').read_text())
+            self.assertFalse(report['teacher_active'])
+            self.assertEqual(report['ema_updates'], 0)
+            for index, record in enumerate(report['samples']):
+                self.assertIsNone(record['teacher'])
+                self.assertEqual(record['filtered_candidate_pixels'], 0)
+                self.assertGreater((output / f'sample_{index:02d}.png').stat().st_size, 1000)
+                with np.load(output / f'sample_{index:02d}.npz') as arrays:
+                    self.assertTrue(np.isnan(arrays['teacher']).all())
+                    self.assertTrue(np.isfinite(arrays['student']).all())
+
     def test_batch_diagnostics_distinguish_empty_and_positive_near_one_loss(self):
         diagnostic = BatchDiagnostics()
         image = torch.ones(1, 7, 4, 4)

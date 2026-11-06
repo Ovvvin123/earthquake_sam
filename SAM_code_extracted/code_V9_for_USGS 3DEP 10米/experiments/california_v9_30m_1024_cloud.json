@@ -1,0 +1,18 @@
+{
+  "extends": "common_bceft_lora_ema_unimatch.json",
+  "arguments": {
+    "dataset": "data/Earth_dataset_v7/key_train.lst",
+    "dataFile": "data/Earth_dataset_v7/faults.h5",
+    "resDir": "runs/v9_30m_1024_cloud_r01",
+    "fullTile": true, "mn": "1024", "batchsize": 4, "stepPerMiniBatch": 2,
+    "lr0": 0.0002, "loraLr": 0.0001, "epochs": 500,
+    "lrSchedule": "warmup_hold_cosine", "lrWarmupEpochs": 10,
+    "lrHoldEnd": 100, "lrDecayEnd": 500, "lrMinFactor": 0.125,
+    "supervisionKey": "label_known", "emaStartEpoch": 250,
+    "onlineStart": 250, "onlineHoldEnd": 250, "onlineRampEnd": 350,
+    "unimatchStart": 250, "unimatchRampEnd": 350,
+    "computePrecision": "bf16", "attentionBackend": "flash", "poolFirst": true,
+    "activationCheckpoint": "decoder",
+    "backupDir": "", "backupEvery": 20, "backupMilestones": "249,350,500"
+  }
+}

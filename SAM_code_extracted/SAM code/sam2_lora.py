@@ -158,7 +158,8 @@ def normalized_config(config):
                            supervisionKey='', supervisionVersion='legacy_v1',
                            collapseGuard=False, consistencyLoss='probability',
                            dataFile='', knownCrop=False, minKnownPixels=1,
-                           knownCropStride=32).items():
+                           knownCropStride=32, emaFeedbackFork='', emaStartEpoch=1,
+                           fullTile=False).items():
         result.setdefault(key, value)
     return result
 

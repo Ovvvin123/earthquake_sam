@@ -20,6 +20,10 @@ parser.add_argument('--threshold', default=0.5, type=float, help='batch size')
 parser.add_argument('--dataset', default='key.lst', type=str, help='batch size')
 parser.add_argument('--dataFile', default='', help='Explicit HDF5; invalid explicit paths never fall back')
 parser.add_argument('--knownCrop', action='store_true', help='Sample known-area windows; fixed max-known validation, no scale augmentation')
+parser.add_argument('--fullTile', action='store_true', help='V7 1024px full tiles with D4 augmentation only')
+parser.add_argument('--backupDir', default='', help='Optional low-frequency backup root; empty disables')
+parser.add_argument('--backupEvery', type=int, default=20)
+parser.add_argument('--backupMilestones', default='249,350,500')
 parser.add_argument('--minKnownPixels', type=int, default=1)
 parser.add_argument('--knownCropStride', type=int, default=32)
 parser.add_argument('--datasetAdd', default='', type=str, help='batch size')
@@ -44,6 +48,7 @@ parser.add_argument('--k0Only', default=False, help='train loss on k0 (any-fault
 parser.add_argument('--epochs', default=160, type=int, help='training epochs')
 parser.add_argument('--emaTeacher', action='store_true', help='enable EMA teacher; correction is separately opt-in')
 parser.add_argument('--emaDecay', default=0.99, type=float, help='EMA decay per optimizer update, in [0, 1)')
+parser.add_argument('--emaStartEpoch', default=1, type=int, help='One-based epoch to create the EMA teacher from the current student')
 parser.add_argument('--emaResume', default='', type=str, help='resume an EMA run from ema_checkpoint.pth; requires --emaTeacher')
 
 parser.add_argument('--emaPreview', action='store_true', help='fixed-crop previews and batch diagnostics; no label correction')
@@ -68,6 +73,8 @@ parser.add_argument('--onlineMaxFraction', type=float, default=0.05, help='maxim
 parser.add_argument('--fixedVal', action='store_true', help='fixed center crop per validation key; per-sample loss and best checkpoints')
 parser.add_argument('--checkpointEvery', type=int, default=20, help='full stage checkpoints with --fixedVal; 0 disables')
 parser.add_argument('--emaStageTransition', action='store_true', help='explicitly fork a warm-up checkpoint into a new fixed-validation run')
+parser.add_argument('--emaFeedbackFork', choices=('', 'keep', 'disable'), default='',
+                    help='paired continuation in a NEW directory; preserve or disable both feedback branches')
 
 # Fault-specific UniMatch V2 adaptation; old commands remain opt-out.
 parser.add_argument('--unimatch', action='store_true', help='SAM-2 dual strong views with positive-only consistency; requires online correction')
@@ -84,6 +91,19 @@ add_adaptation_arguments(parser)
 parser.add_argument('--seed', type=int, default=0)
 parser.add_argument('--resume', default='', help='supervised training_checkpoint.pth')
 args = parser.parse_args()
+if args.fullTile:
+    if args.mn not in ('1024', '1024,1024') or args.knownCrop or args.supervisionKey != 'label_known':
+        parser.error('--fullTile requires mn=1024, supervisionKey=label_known and no knownCrop')
+    if args.modelType != 'mars_sam' or args.isalign or args.datasetAdd:
+        parser.error('--fullTile requires mars_sam without isalign or datasetAdd')
+    args.fixedVal = True
+if args.backupEvery < 0:
+    parser.error('--backupEvery must be nonnegative')
+try:
+    if any(int(x) < 1 for x in args.backupMilestones.split(',') if x.strip()):
+        raise ValueError()
+except ValueError:
+    parser.error('--backupMilestones must be comma-separated positive epochs')
 args.supervisionVersion = 'known_mask_v2'
 if args.knownCrop and not args.supervisionKey:
     parser.error('--knownCrop requires --supervisionKey')
@@ -161,9 +181,19 @@ if args.checkpointEvery < 0:
     parser.error('--checkpointEvery must be nonnegative')
 if args.emaStageTransition and not (args.emaResume and args.fixedVal):
     parser.error('--emaStageTransition requires --emaResume and --fixedVal (implied by online correction)')
+if args.emaFeedbackFork:
+    if not (args.emaResume and args.emaTeacher and args.fixedVal) or args.emaStageTransition:
+        parser.error('--emaFeedbackFork requires EMA resume, fixed validation, and no stage transition')
+    enabled = args.emaFeedbackFork == 'keep'
+    if args.onlineCorrection != enabled or args.unimatch != enabled:
+        parser.error('Feedback fork must keep both feedback branches or disable both')
 
 if not 0.0 <= args.emaDecay < 1.0:
     parser.error('--emaDecay must be in [0, 1)')
+if args.emaStartEpoch < 1 or (args.emaStartEpoch != 1 and not args.emaTeacher):
+    parser.error('--emaStartEpoch must be positive and delayed activation requires --emaTeacher')
+if args.onlineCorrection and args.onlineStart < args.emaStartEpoch:
+    parser.error('--onlineStart must be >= --emaStartEpoch')
 if args.emaResume and (not args.emaTeacher or args.job != 'train'):
     parser.error('--emaResume requires --emaTeacher and --job train')
 

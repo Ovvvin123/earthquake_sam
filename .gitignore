@@ -61,6 +61,8 @@ wsl-setup/exit-code.txt
 # Local datasets, experiment artifacts and generated galleries (2026-10-23)
 SAM_code_extracted/SAM code/earth_dataset_v5/
 SAM_code_extracted/SAM code/.earth_dataset_v5.building/
+SAM_code_extracted/SAM code/earth_dataset_V6/
+SAM_code_extracted/SAM code/.earth_dataset_V6.building/
 SAM_code_extracted/SAM code/earth_dataset_greece_nz_*/
 SAM_code_extracted/SAM code/train_*/
 SAM_code_extracted/SAM code/diagnostics/

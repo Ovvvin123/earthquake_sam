@@ -1,0 +1,23 @@
+{
+  "arguments": {
+    "job": "train", "modelType": "mars_sam", "mn": "256",
+    "batchsize": 2, "stepPerMiniBatch": 4, "gpuIndex": 0,
+    "lr0": 0.0001, "d0": 0.01, "dw": 0.08, "alpha": 0.1, "dropout": 0,
+    "lossFunc": "BCEFocalTversky", "tverskyWeight": 0.5, "k0Only": true,
+    "pu": 0, "fixedVal": true, "accumulationVersion": "window_v2",
+    "collapseGuard": true, "consistencyLoss": "logits",
+    "emaTeacher": true, "emaDecay": 0.98, "emaPreview": true,
+    "previewCount": 6, "previewEvery": 5, "previewThreshold": 0.7,
+    "previewBuffer": 2, "previewMinPixels": 8, "checkpointEvery": 20,
+    "onlineCorrection": true, "onlineStart": 41, "onlineHoldEnd": 50,
+    "onlineRampEnd": 80, "onlineWeightStart": 0.05, "onlineWeightMax": 0.2,
+    "onlineThreshold": 0.9, "onlineSupport": 0.5, "onlineBuffer": 3,
+    "onlineMinPixels": 16, "onlineMaxFraction": 0.05,
+    "unimatch": true, "unimatchStart": 41, "unimatchRampEnd": 80,
+    "unimatchWeight": 0.1, "unimatchContrast": 0.2,
+    "unimatchBrightness": 0.1, "unimatchNoise": 0.03,
+    "samAdaptation": "lora", "loraRank": 8, "loraAlpha": 16,
+    "loraDropout": 0, "loraStages": "all", "loraLr": 0.00005,
+    "loraWeightDecay": 0, "seed": 7
+  }
+}

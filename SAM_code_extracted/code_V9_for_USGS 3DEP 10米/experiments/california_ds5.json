@@ -1,0 +1,12 @@
+{
+  "extends": "common_bceft_lora_ema_unimatch.json",
+  "arguments": {
+    "dataset": "earth_dataset_v5/key_train.lst",
+    "dataFile": "earth_dataset_v5/faults.h5",
+    "resDir": "runs/california_ds5_bceft_lora8_ema_unimatch_seed7_r01",
+    "epochs": 500, "supervisionKey": "label_known",
+    "knownCrop": true, "minKnownPixels": 1, "knownCropStride": 32,
+    "onlineStart": 121, "onlineHoldEnd": 150, "onlineRampEnd": 240,
+    "unimatchStart": 121, "unimatchRampEnd": 240
+  }
+}

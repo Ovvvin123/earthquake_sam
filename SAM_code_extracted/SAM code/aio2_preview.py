@@ -125,7 +125,8 @@ class FixedPreview:
                 for index, (key, cpu_image, truth, valid) in enumerate(self.samples):
                     inputs = cpu_image.to(next(student.parameters()).device)
                     sp = student(inputs)[0, 0].detach().float().cpu().numpy()
-                    tp = teacher.predict(inputs)[0, 0].detach().float().cpu().numpy()
+                    tp = (teacher.predict(inputs)[0, 0].detach().float().cpu().numpy()
+                          if teacher is not None else np.full_like(sp, np.nan))
                     if sp.shape != truth.shape or tp.shape != truth.shape:
                         raise ValueError('Prediction and fixed-crop label dimensions differ.')
                     known = self.known_masks[key]
@@ -136,7 +137,7 @@ class FixedPreview:
                               'original_positive_fraction': float(truth.mean()),
                               'valid_positive_fraction': float(truth[valid].mean()) if valid.any() else None,
                               'student': probability_stats(sp, valid, self.threshold),
-                              'teacher': probability_stats(tp, valid, self.threshold),
+                              'teacher': probability_stats(tp, valid, self.threshold) if teacher is not None else None,
                               'raw_candidate_pixels': int(raw.sum()), 'raw_components': raw_count,
                               'filtered_candidate_pixels': int(candidate.sum()),
                               'filtered_components': candidate_count,
@@ -146,7 +147,7 @@ class FixedPreview:
                         record.update(known_pixels=int(known.sum()),
                                       known_positive_fraction=float(truth[known].mean()) if known.any() else None,
                                       student_known=probability_stats(sp,known,self.threshold),
-                                      teacher_known=probability_stats(tp,known,self.threshold))
+                                      teacher_known=probability_stats(tp,known,self.threshold) if teacher is not None else None)
                     stem = f'sample_{index:02d}'
                     np.savez_compressed(directory / f'{stem}.npz', student=sp, teacher=tp,
                                         original_label=truth, valid=valid, label_known=known,
@@ -165,8 +166,11 @@ class FixedPreview:
                     axes[0, 1].set_title('Known labels: green; unknown: gray' if self.masked else 'Original labels (green)')
                     im = axes[0, 2].imshow(np.ma.array(sp, mask=~valid), vmin=0, vmax=1, cmap='magma')
                     axes[0, 2].set_title('Student probability')
-                    axes[1, 0].imshow(np.ma.array(tp, mask=~valid), vmin=0, vmax=1, cmap='magma')
-                    axes[1, 0].set_title('EMA teacher probability')
+                    if teacher is not None:
+                        axes[1, 0].imshow(np.ma.array(tp, mask=~valid), vmin=0, vmax=1, cmap='magma')
+                    else:
+                        axes[1, 0].text(.5, .5, 'Teacher not activated yet', ha='center', va='center')
+                    axes[1, 0].set_title('EMA teacher probability' if teacher is not None else 'EMA pending')
                     fig.colorbar(im, ax=[axes[0, 2], axes[1, 0]], shrink=.65, label='Probability')
                     overlay[raw] = (0, 1, 1, .65)
                     overlay[candidate] = (1, 0, 1, .85)
@@ -174,6 +178,8 @@ class FixedPreview:
                     axes[1, 1].imshow(overlay)
                     axes[1, 1].set_title('Candidates: cyan=raw, magenta=area-filtered')
                     for name, probability, color in [('Student', sp, '#d97706'), ('Teacher', tp, '#2563eb')]:
+                        if name == 'Teacher' and teacher is None:
+                            continue
                         values = probability[valid & np.isfinite(probability)]
                         axes[1, 2].hist(values, bins=np.linspace(0, 1, 21), histtype='step',
                                         label=name, color=color, linewidth=1.5)
@@ -189,7 +195,8 @@ class FixedPreview:
             finally:
                 for module, mode in modes:
                     module.training = mode
-        report = {'epoch': epoch, 'ema_updates': teacher.num_updates, 'preview_only': True,
+        report = {'epoch': epoch, 'ema_updates': teacher.num_updates if teacher is not None else 0,
+                  'teacher_active': teacher is not None, 'preview_only': True,
                   'threshold': self.threshold, 'buffer_px': self.buffer_px, 'min_pixels': self.min_pixels,
                   'histogram_edges': np.linspace(0, 1, 21).tolist(), 'samples': records}
         (directory / 'metrics.json').write_text(json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False),

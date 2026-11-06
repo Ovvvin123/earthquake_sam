@@ -1,5 +1,6 @@
 
 import math
+from pathlib import Path
 import torch
 from torch import nn
 from torch.nn import init
@@ -13,7 +14,7 @@ from sam2.sam2_image_predictor import SAM2ImagePredictor
 model_cfg = "sam2_hiera_l.yaml"
 sam2_checkpoint = 'sam2_hiera_large.pt'
 model_cfg = "configs/sam2/sam2_hiera_s.yaml"
-sam2_checkpoint = 'sam2_hiera_small.pt'
+sam2_checkpoint = str(Path(__file__).resolve().parent / 'sam2_hiera_small.pt')
 #sam2_model = build_sam2(model_cfg, sam2_checkpoint)
 sam2_model_build = lambda: build_sam2(model_cfg, sam2_checkpoint,image_size=(256,256),device='cpu')
 

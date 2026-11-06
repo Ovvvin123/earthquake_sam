@@ -1,0 +1,25 @@
+{
+  "extends": "common_bceft_lora_ema_unimatch.json",
+  "arguments": {
+    "dataset": "Earth_dataset_v7/key_train.lst",
+    "dataFile": "Earth_dataset_v7/faults.h5",
+    "resDir": "/home/ovvvin/earthquake-sam-results/runs/v7_30m_1024_lora_lr2_ema250_350_seed7_r01",
+    "fullTile": true,
+    "mn": "1024",
+    "batchsize": 1,
+    "stepPerMiniBatch": 8,
+    "lr0": 0.0002,
+    "loraLr": 0.0001,
+    "epochs": 500,
+    "supervisionKey": "label_known",
+    "emaStartEpoch": 250,
+    "onlineStart": 250,
+    "onlineHoldEnd": 250,
+    "onlineRampEnd": 350,
+    "unimatchStart": 250,
+    "unimatchRampEnd": 350,
+    "backupDir": "/mnt/f/Study————————/UCLA/Earthquake-SAM_交接/training_backups/v7_30m_1024_lora_lr2_ema250_350_seed7_r01",
+    "backupEvery": 20,
+    "backupMilestones": "249,350,500"
+  }
+}

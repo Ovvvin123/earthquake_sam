@@ -1,0 +1,458 @@
+{
+  "source": "F:\\Study————————\\UCLA\\Earthquake-SAM_交接\\SAM_code_extracted\\SAM code",
+  "target": "F:\\Study————————\\UCLA\\Earthquake-SAM_交接\\SAM_code_extracted\\code_V9_for_USGS 3DEP 10米",
+  "files": [
+    {
+      "path": "aio2_ema.py",
+      "sha256": "FF3D65E6096BBC81211B9047F2651AA41EF874A461547C84831B0ABE155DEC28",
+      "bytes": 12666
+    },
+    {
+      "path": "aio2_online.py",
+      "sha256": "163D07248C50C9F9939488E204ED443DA31AE71560ADB986AB2A8F8E12193665",
+      "bytes": 16876
+    },
+    {
+      "path": "aio2_preview.py",
+      "sha256": "5C40C5AB41200BACA0157B80837805092670AF08537C3965931EBCA133040D9D",
+      "bytes": 15604
+    },
+    {
+      "path": "audit_earth_dataset_v7.py",
+      "sha256": "F48F6E1DA89580DFFF11D1198ED59BAE516076B119CFE57CD1B11C0305ADA60C",
+      "bytes": 5202
+    },
+    {
+      "path": "audit_fault_labels.py",
+      "sha256": "DFE54329672BF88D0AFB8D00C923013A02421EF965ADEE6F9DB3F3D5DE69C831",
+      "bytes": 17150
+    },
+    {
+      "path": "audit_greece_nz_dataset.py",
+      "sha256": "A3EA1F35E9687502C4D1BF0EA79FEE33E63F82B35C87EEC2ADB7DD38144D8D1C",
+      "bytes": 3786
+    },
+    {
+      "path": "audit_v5_label_coverage.py",
+      "sha256": "DDD07AB0C8EC43665F9FFB052930C30F23496858D5FEF71E0E85685893C4AFA6",
+      "bytes": 11970
+    },
+    {
+      "path": "build_earth_dataset_v5.py",
+      "sha256": "0E918099E2C0394441E03400330DA200447FF0A2E6D653033C99BAC6608FAF48",
+      "bytes": 15541
+    },
+    {
+      "path": "build_earth_dataset_V6.py",
+      "sha256": "10BCDE59854BA7480108105E6AA8AD52A16FC5B9BAD119B1AE5EED221491A785",
+      "bytes": 19913
+    },
+    {
+      "path": "build_earth_dataset_v7.py",
+      "sha256": "DA45D3C85EEC27323D76020FEF3011B4BF7C9E27CCFBE8049D4CF06C16A9334E",
+      "bytes": 36030
+    },
+    {
+      "path": "build_lora_gallery_index.py",
+      "sha256": "69A6768256BB8F15E84AA816C0117EC10E28A8C4F23E9E6679A9D8C1001D1B26",
+      "bytes": 6839
+    },
+    {
+      "path": "build_loss_ablation_gallery.py",
+      "sha256": "ED894C30C875AB5B4857A778A5C0B0C395243FB372B06859E018B224D8C7AC6D",
+      "bytes": 6633
+    },
+    {
+      "path": "build_multiregion.py",
+      "sha256": "C26E32D7A3E53D2CB7BC6E5AB6E4C19679C041DB2C7C33F74B99F5F5E8D449CB",
+      "bytes": 5995
+    },
+    {
+      "path": "check_v7_wsl.py",
+      "sha256": "5DBF0A369E4BE1C06F6F7E417D8723D99A89BD49827C8F096D71A0E79EDDDC43",
+      "bytes": 3585
+    },
+    {
+      "path": "compare_three_version_lines.py",
+      "sha256": "BE623F34063C3BD3CE6C66DBE963F0A98607F753E6BC4C02E55CFBF586DD10CB",
+      "bytes": 11376
+    },
+    {
+      "path": "config.py",
+      "sha256": "85A0DF95DDCBED1D08FB2FB8EF23295A0B99F030C4529306D5C7A94B7528A225",
+      "bytes": 15940
+    },
+    {
+      "path": "copy_v7_to_wsl.py",
+      "sha256": "357B70D43E95978A05BB7EA915AE91F738A4B5E819CFC2EE8ACA0D13CA7B3C52",
+      "bytes": 6307
+    },
+    {
+      "path": "count_fault_branches.py",
+      "sha256": "E2BFF52DC8DC612AE8E4DE539261B0617857DB9E9C19FDB76A01AA21593F6717",
+      "bytes": 14844
+    },
+    {
+      "path": "count_fault_segments.py",
+      "sha256": "209F4630FD6B137F45DD4390F52E52C0D3570160A4E4A1B6463541709DD6105D",
+      "bytes": 14123
+    },
+    {
+      "path": "diagnose_greece_nz_collapse.py",
+      "sha256": "F53CAABA2431EDA7664E2E70E3372F6057F44241A13E6CD7A3A070F477B35184",
+      "bytes": 5667
+    },
+    {
+      "path": "diagnose_lora_collapse.py",
+      "sha256": "758DE1F587BB04E27C8908C117D9659858C6874C984A5093BC0CC02D28FFC02D",
+      "bytes": 6995
+    },
+    {
+      "path": "epoch_backup.py",
+      "sha256": "0CFC4AC01C39FC6F04C7B0763F901BFC43F90F7D70316BC5CF668140AEE0EDFE",
+      "bytes": 4074
+    },
+    {
+      "path": "evaluate_cv.py",
+      "sha256": "E7FBCE229DE813B0D12098A1D6F56EAE5259A4795C63473D0C1E57E91864CC68",
+      "bytes": 12414
+    },
+    {
+      "path": "evaluate_online_train_val_ap.py",
+      "sha256": "EA807DD42A16299A1CC7D3F390EFF1BBC0439339F9882531EF53BD1A1251F82C",
+      "bytes": 6637
+    },
+    {
+      "path": "evaluate.py",
+      "sha256": "F22B72FBF1A5F7B1E28B6EA162A4297359777B3CA08A418660C3DEB345EBE0C4",
+      "bytes": 6388
+    },
+    {
+      "path": "export_bceft_galleries.py",
+      "sha256": "698C919EE27186E817E9DB09AF19BC64A40C2CBD78A7E7CA6B1CA85CA51A6A57",
+      "bytes": 17555
+    },
+    {
+      "path": "export_fault_predictions.py",
+      "sha256": "FF8C5E7E75AD92AFBABD78B0680BF6181EE96AF159CC05B453E6A089C9918AD8",
+      "bytes": 11954
+    },
+    {
+      "path": "export_greece_nz_results.py",
+      "sha256": "711472FC5474EA3C11C9C45956576992E84F66A4EB19EAA27F8EC951D82FF439",
+      "bytes": 11350
+    },
+    {
+      "path": "export_unimatch_train_mosaic.py",
+      "sha256": "6459FFD07829004A292D3E5B2C27E3D5EFB393EFC040BEA69C3EF746492F4BBB",
+      "bytes": 2556
+    },
+    {
+      "path": "export_v5_feedback_comparison.py",
+      "sha256": "DF9375D1043B9B4D5563BF4BAAB2921A39270CC4C0AA10CDC3A3AEA7C486EEE7",
+      "bytes": 12514
+    },
+    {
+      "path": "export_v8_gallery.py",
+      "sha256": "989021EC216F91426258867160957EE1CBF2A1F53EAF6514401D028A61226D56",
+      "bytes": 12436
+    },
+    {
+      "path": "fault_losses.py",
+      "sha256": "67E993441A220F240C0A4D2276E04CE71723646644454EF89C28052984C091C8",
+      "bytes": 4295
+    },
+    {
+      "path": "fault_metrics.py",
+      "sha256": "ED74E8D3CC6C9CB6B935373CCF0415CC93CF39E25A79B53D58052CA0CEE5119B",
+      "bytes": 2473
+    },
+    {
+      "path": "finalize_earth_dataset_v7.py",
+      "sha256": "D0CC01F98022631BD55B39E3207F94D8E5B67B6C33389BF609C84BC143FD81F8",
+      "bytes": 3149
+    },
+    {
+      "path": "known_crops.py",
+      "sha256": "A8B5353CFB7BBC8A5794FC86A733A5B6227BB84C0225A0290618FA0579B5AC34",
+      "bytes": 2203
+    },
+    {
+      "path": "make_blocked_split.py",
+      "sha256": "954DA0F2E507ABB0162A39DE2A7480EC066A993EE6773FBC4730B7E653664D2B",
+      "bytes": 6996
+    },
+    {
+      "path": "plot_three_version_losses.py",
+      "sha256": "5CD7F1A7A1F606883EF7C26DFD22C75E3D8BAA931B4233252F8BC16A01547473",
+      "bytes": 5265
+    },
+    {
+      "path": "plot_usgs_prediction_map.py",
+      "sha256": "4E0340D6CB3137CFA4DF8B5A7090256EEC1466C988D9E5CA1DEB73DB22786AFB",
+      "bytes": 10444
+    },
+    {
+      "path": "prepare_dataset_gem.py",
+      "sha256": "3AA641D3A92003F62AB6AA1D4DA4D002138522FC63986C0A17E55C3BC805542D",
+      "bytes": 9578
+    },
+    {
+      "path": "prepare_earth_dataset.py",
+      "sha256": "B6EBD93C19D637C3D3DA5001526C6C79F5A2087A8D4B47E0CF6348DB33641BFA",
+      "bytes": 10724
+    },
+    {
+      "path": "prepare_greece_nz.py",
+      "sha256": "5CA0A757C0B5631D62817211024A6C7B12C83B6A10141B9415DD13838259ADFE",
+      "bytes": 13865
+    },
+    {
+      "path": "preview_ema.py",
+      "sha256": "CBDFEB6DC0FABFC69EB58FD2419512DA9FC08E8BAE5B853FBC1EE7DFD01AB03F",
+      "bytes": 2582
+    },
+    {
+      "path": "preview_v5_coastal_envelope.py",
+      "sha256": "D95338991E7722AD136F69527CED7AAF2D5EFE37FC3A0E72FE2B2F848829665D",
+      "bytes": 7776
+    },
+    {
+      "path": "preview_v6_3dep.py",
+      "sha256": "0D141ADA1A3DC08A7CA5C05AD4C51A8A77664C9F6EE279FFA266F7DC540BA4DE",
+      "bytes": 23033
+    },
+    {
+      "path": "preview_v6_land_envelope.py",
+      "sha256": "4BEC4C5D49E1CB67AD77083379D0E383DF0500A17D40A983ACA137D193A44985",
+      "bytes": 16032
+    },
+    {
+      "path": "preview_v7_fov.py",
+      "sha256": "3894B7E557F29FEB27D8F9BA1384A2694B5F62A612FA7BDC216F5C686222D627",
+      "bytes": 21216
+    },
+    {
+      "path": "recover_v5_feedback_b.py",
+      "sha256": "197AB8D1635B1CD16696576C9EC8D82D4822523B9F3B40515C78F98B6AAA77F0",
+      "bytes": 6893
+    },
+    {
+      "path": "run_experiment.py",
+      "sha256": "E19A928CB883A370FBD4B1422E9AD04E905F216AC4B28C5ACEDA5D8F239C5D07",
+      "bytes": 13017
+    },
+    {
+      "path": "run_greece_nz_training.py",
+      "sha256": "B3776AA992C2BA3B3447B256362D7F5B139260A53BAAF06E0D6F8A4FD37A4ADF",
+      "bytes": 6512
+    },
+    {
+      "path": "run_masked_loss_ablation.py",
+      "sha256": "7C78F58C323716085D16DB02F099DEEC419F7AAB55ECAE769B636BB994A85C65",
+      "bytes": 13918
+    },
+    {
+      "path": "run_v5_feedback_ablation.py",
+      "sha256": "B771B45D52570480BE4268F741B7D7A7ADB6B6648FE3AF3315EC87FBAA560974",
+      "bytes": 7151
+    },
+    {
+      "path": "sam2_hiera_small.pt",
+      "sha256": "95949964D4E548409021D47B22712D5F1ABF2564CC0C3C765BA599A24AC7DCE3",
+      "bytes": 184309650
+    },
+    {
+      "path": "sam2_lora.py",
+      "sha256": "D7DE07A80BFD42F7D13D668EACD4C857335C367D8EDE790D9EE524534B575685",
+      "bytes": 12532
+    },
+    {
+      "path": "set_k1_eq_k0.py",
+      "sha256": "8A15E8B0325C2065B87D3EA34DB248C613B9EF8860A4604D5CB9397EE385BBCC",
+      "bytes": 769
+    },
+    {
+      "path": "smoke_anticollapse.py",
+      "sha256": "808D29DDD4081465BCBA2880D1CD7EC6F462AC534B8FDD28A99849D19F1296EF",
+      "bytes": 9167
+    },
+    {
+      "path": "smoke_lora.py",
+      "sha256": "731861702F28039BA311549C0AC723F3317DF49C07952E9203B4A9FC816D18B6",
+      "bytes": 7299
+    },
+    {
+      "path": "smoke_test_mac.py",
+      "sha256": "D73FA3617B1545D4DB79ECC5E5446DF1DC72E29AA655A3CECBEB74353EB3728D",
+      "bytes": 2674
+    },
+    {
+      "path": "smoke_test_wsl.py",
+      "sha256": "62C17C136161747E68F943FCDCBD5D1B673AE4157063DD1D2FF64A36651535E8",
+      "bytes": 3452
+    },
+    {
+      "path": "smoke_unimatch.py",
+      "sha256": "F55DBE0A4D1E3CF9DDBE8A08329914289FC4F813693862882925772EF2EE2472",
+      "bytes": 6484
+    },
+    {
+      "path": "summarize_train_test_lines.py",
+      "sha256": "0BA53D9DE7B40AB71BF53675F7E72E22EC74BF2B2FB05FB1EDC5DE51C3DE1C6C",
+      "bytes": 5181
+    },
+    {
+      "path": "test_aio2_ema.py",
+      "sha256": "B38D7D4850600D83FA39F7D9EE370126608D942AD737678D71F77EE586365587",
+      "bytes": 16025
+    },
+    {
+      "path": "test_aio2_online.py",
+      "sha256": "896A100C7844A77DF6C9DE668108A1EC63C38F917FA935AC430EA9F8A542C069",
+      "bytes": 12941
+    },
+    {
+      "path": "test_aio2_preview.py",
+      "sha256": "1833F1EB298013E1D313056E06D6DBE63ACD5DA28AA8FF1FBD5D02178435EF4C",
+      "bytes": 10183
+    },
+    {
+      "path": "test_evaluate_cv.py",
+      "sha256": "FD2A37088CDC0A835676DF1FE5430827840067F41396CAA492883DDB72FC9AE8",
+      "bytes": 3769
+    },
+    {
+      "path": "test_experiment_launcher.py",
+      "sha256": "D7FE786AEC7340F45725AD89EBFFEA38A67CABA7CDEBB781FAC01175979EB15E",
+      "bytes": 8328
+    },
+    {
+      "path": "test_fault_losses.py",
+      "sha256": "5B5B33332AAA4E33774626F1FF64B8F7E6672B18C9B62877E030466761D502F9",
+      "bytes": 7863
+    },
+    {
+      "path": "test_feedback_fork.py",
+      "sha256": "971C545CB8F91ACA9D2919011E67BFCFF00FA18E6CF434C0FE8BCC2B904B14ED",
+      "bytes": 3814
+    },
+    {
+      "path": "test_greece_nz_preparation.py",
+      "sha256": "2D9FF877E780AEE634145F7B2B00DAAE30BBF50D5F1A43FA4D22BCEBC4B39DAE",
+      "bytes": 8502
+    },
+    {
+      "path": "test_sam2_lora.py",
+      "sha256": "853DA5370CAA27EA0F8C3914428D48CB01CD00669A9DA0CBA53A76CB0C4C6096",
+      "bytes": 9066
+    },
+    {
+      "path": "test_training_numerics.py",
+      "sha256": "484B27864947FD3C78D1F6FC7CD92063CDF088139D893D81F16B53F9024ABAE2",
+      "bytes": 5009
+    },
+    {
+      "path": "test_training_sources.py",
+      "sha256": "644809B19C249BEE728FB3E87CF9292B14FF53ECDE24230D75351CEF0B2FCDB4",
+      "bytes": 1911
+    },
+    {
+      "path": "test_unimatch_fault.py",
+      "sha256": "B4DC3A2ECDBEC759A86EF853FB543F904D7FA2EFC08A03F10AFD4E1849B49A9B",
+      "bytes": 12082
+    },
+    {
+      "path": "test_wsl_v7.py",
+      "sha256": "D5388C9D9D932B2DFC061A361EFA5968A8C66F5E58900A77A75371124280DB1D",
+      "bytes": 3086
+    },
+    {
+      "path": "tool.py",
+      "sha256": "F2E9306628AB069BD90CEA1015657BA7ADC970532282ACBA14457D810A4F6C60",
+      "bytes": 56814
+    },
+    {
+      "path": "torchUnet.py",
+      "sha256": "C4D9C55995063BE0A707779AA5959A28B33894E11879FD1D6F95BFF4A1A23376",
+      "bytes": 35066
+    },
+    {
+      "path": "training_checkpoint.py",
+      "sha256": "05064DBD7504A8589F54C1964E7C552B0F2026C0905498DECF30004B7DE9477A",
+      "bytes": 2295
+    },
+    {
+      "path": "training_numerics.py",
+      "sha256": "4F7FEC4BE7ADAF84267E9B061681265EF6669CB984401419227FA9D7F5C1DB8B",
+      "bytes": 1505
+    },
+    {
+      "path": "training_sources.py",
+      "sha256": "5ABAA5E6C1F8965D9C338C476DCED10F1488971E1ACD8655C83B08A7782DAD04",
+      "bytes": 2265
+    },
+    {
+      "path": "trainV10.py",
+      "sha256": "E8CDF9AC82C33A11B21FB495B244645CAA9E90D47CB83046168910D874107A71",
+      "bytes": 145195
+    },
+    {
+      "path": "unimatch_fault.py",
+      "sha256": "ADC8C7DDA6F65E3C6CC37F5899A56B20274778346670DD8FCAC9610645DB21CC",
+      "bytes": 10909
+    },
+    {
+      "path": "v7_dataset.py",
+      "sha256": "AD9F807FBD8AD835CBC7D5CCBBD68E0E2A352D4A4B24460A1F4CCDA774B72DDC",
+      "bytes": 6001
+    },
+    {
+      "path": "validate_earth_dataset_V6.py",
+      "sha256": "0C0E8EABF9B66877E31859804B994A333DDD116C23FCE701B9E887D517A4B946",
+      "bytes": 8006
+    },
+    {
+      "path": "verify_fault_training.py",
+      "sha256": "4B2EA7FCF95850D59E43B7AE11129348B7AF1F8F5E6ABCFC3656206C0D170C09",
+      "bytes": 4489
+    },
+    {
+      "path": "verify_lora_cli.py",
+      "sha256": "0610F7466D81FAB643E3C284535CBE8E8AC204A5D7A31C8287C20E60450558DD",
+      "bytes": 5649
+    },
+    {
+      "path": "experiments\\california_ds5.json",
+      "sha256": "A6041EB110730D36F02EBA1A28549EE40617673627AEA2C0158744048AE0386B",
+      "bytes": 480
+    },
+    {
+      "path": "experiments\\california_v7_30m_1024_wsl.json",
+      "sha256": "E2F20D214F543EAE8356B3753B179AE69B283013449BFC1EAD92F3B145892FF9",
+      "bytes": 816
+    },
+    {
+      "path": "experiments\\california_v8_land12km_ds6.json",
+      "sha256": "A90F384EB343664C8248CD854C523BF89F8DE6037F2F2B68ACA62024A49CB79F",
+      "bytes": 503
+    },
+    {
+      "path": "experiments\\common_bceft_lora_ema_unimatch.json",
+      "sha256": "2520F1920D31BF8114CAD0AF4BA6037E70CD782F7EEF799CE8214A68A4A16DC9",
+      "bytes": 1207
+    },
+    {
+      "path": "experiments\\greece_nz_original.json",
+      "sha256": "E5A9E7BD1572C864D1F692B1322D662BEBD57468232F8E95F99DDC202EA7B4D5",
+      "bytes": 317
+    },
+    {
+      "path": "V5_different_split\\sam2_lora.py",
+      "sha256": "D7DE07A80BFD42F7D13D668EACD4C857335C367D8EDE790D9EE524534B575685",
+      "bytes": 12532
+    }
+  ],
+  "original_untouched": true,
+  "training_started": false
+}

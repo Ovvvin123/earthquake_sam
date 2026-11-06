@@ -1,6 +1,16 @@
 # Earthquake-SAM：冻结 SAM-2 + LoRA + 掩膜混合损失
 
-## 当前更新：2026-10-23
+## 2026-11-06 训练代码交接
+
+| 版本 | 训练入口与配置 | 数据要求 |
+|---|---|---|
+| V7 | 在 [SAM code](SAM_code_extracted/SAM%20code/) 中运行 `python run_experiment.py --sequence experiments/california_v7_30m_1024_wsl.json` | `Earth_dataset_v7`，30 米 DEM，1024 × 1024 图块 |
+| V8 | 在同一目录运行 `python run_experiment.py --sequence experiments/california_v8_land12km_ds6.json` | `earth_dataset_V6`，加州陆地 12 公里掩膜 |
+| V9 | 在 [V9 独立代码目录](SAM_code_extracted/code_V9_for_USGS%203DEP%2010米/) 中运行 `python run_experiment.py --sequence experiments/california_v9_30m_1024_8gb.json` | 目录名保留“10米”，当前配置实际使用 V7 的 **30 米** DEM 和 1024 × 1024 图块 |
+
+以上命令执行预检。运行前请自行准备对应的数据集和 `sam2_hiera_small.pt`，按本机环境核对配置中的数据、输出与备份路径。V9 的 600 轮和云端配置也在其 `experiments/` 目录中，云端环境安装和资产校验步骤见 [V9 部署说明](SAM_code_extracted/code_V9_for_USGS%203DEP%2010米/cloud/README.txt)。
+
+## 2026-10-23 训练代码更新
 
 本次在已有 **冻结 SAM-2＋Q/V LoRA** 的基础上，加入 **BCEWithLogits＋0.5×Focal Tversky**、`label_known` 有效监督掩膜、梯度累积修正、塌缩诊断，以及 **V5 完成后再运行 V6** 的配置化启动器。完整更新、参数、代码位置和检查结果见 [本次项目更新说明](docs/updates/2026-10-23-lora-bceft-label-known.md)。
 

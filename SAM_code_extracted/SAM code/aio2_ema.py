@@ -105,17 +105,44 @@ def _plain_scalars(value):
     return value
 
 
-def save_ema_checkpoint(path, student, optimizer, teacher, next_epoch, config, training_state=None):
+def activate_ema(student, teacher, epoch, args, global_step=0):
+    """Create once at the one-based boundary; never allocate a warm-up teacher."""
+    if teacher is None and args.emaTeacher and epoch >= getattr(args, 'emaStartEpoch', 1):
+        teacher = EMATeacher(student, args.emaDecay)
+        teacher.global_step = int(global_step)
+    return teacher
+
+
+def restore_ema_run(path, student, optimizer, config):
+    """Restore both pre-activation and active checkpoints without an early teacher."""
+    state = torch.load(path, map_location='cpu', weights_only=True)
+    if state.get('format') != 'aio2_ema_v1':
+        raise ValueError('Use an ema_checkpoint.pth')
+    active = state.get('teacher') is not None
+    global_step = int(state.get('global_step', state['teacher']['num_updates'] if active else 0))
+    best = state.get('training_state') if state['config'].get('resDir') == config.get('resDir') else None
+    del state
+    teacher = EMATeacher(student, config['emaDecay']) if active else None
+    epoch = load_ema_checkpoint(path, student, optimizer, teacher, config)
+    if teacher is not None:
+        best = teacher.resume_training_state
+    return teacher, epoch, global_step, best
+
+
+def save_ema_checkpoint(path, student, optimizer, teacher, next_epoch, config, training_state=None, global_step=None):
     """Preserve pending grads: the existing trainer can carry them across epochs.
 
     This deliberately preserves the existing gradient accumulation schedule.
     Configuration and RNG are stored using weights_only-compatible types.
     """
     from sam2_lora import checkpoint_identity
+    if teacher is None and not (config.get('emaTeacher') and next_epoch < config.get('emaStartEpoch', 1)):
+        raise ValueError('Missing teacher outside delayed EMA warm-up')
     checkpoint = {
         'identity': checkpoint_identity(config),
         'format': 'aio2_ema_v1', 'student': student.state_dict(),
-        'optimizer': _plain_scalars(optimizer.state_dict()), 'teacher': teacher.state_dict(),
+        'optimizer': _plain_scalars(optimizer.state_dict()), 'teacher': teacher.state_dict() if teacher is not None else None,
+        'global_step': int(global_step if global_step is not None else getattr(teacher, 'global_step', getattr(teacher, 'num_updates', 0))),
         'next_epoch': int(next_epoch), 'config': dict(config), 'rng': _rng_state(),
         'training_state': training_state,
         'gradients': {name: p.grad.detach().cpu().clone()
@@ -127,6 +154,30 @@ def save_ema_checkpoint(path, student, optimizer, teacher, next_epoch, config, t
     temporary.replace(path)
 
 
+def feedback_fork_overrides(saved_config, config):
+    """Allow only the declared feedback ablation, never arbitrary resume drift."""
+    mode = config.get('emaFeedbackFork', '')
+    saved_mode = saved_config.get('emaFeedbackFork', '')
+    if not mode or mode == saved_mode:
+        return set()
+    if mode not in ('keep', 'disable') or saved_mode:
+        raise ValueError('Cannot change an existing feedback fork mode')
+    if config.get('emaStageTransition') or not config.get('emaTeacher') or not config.get('fixedVal'):
+        raise ValueError('Feedback fork requires EMA and fixed validation without stage transition')
+    if not all(saved_config.get(k) for k in ('emaTeacher', 'onlineCorrection', 'unimatch')):
+        raise ValueError('Feedback fork source must have both feedback branches enabled')
+    output = Path(config['resDir']).resolve()
+    source = Path(saved_config['resDir']).resolve()
+    if output == source or output in source.parents or source in output.parents:
+        raise ValueError('Feedback fork requires a separate NEW output directory')
+    if any((output / n).exists() for n in ('ema_checkpoint.pth', 'model.pth', 'best_metrics.json', 'adaptation_history.jsonl')):
+        raise ValueError('Feedback fork output already contains results')
+    enabled = mode == 'keep'
+    if any(bool(config.get(k, False)) != enabled for k in ('onlineCorrection', 'unimatch')):
+        raise ValueError('Feedback fork must keep or disable both branches')
+    return {'emaFeedbackFork', 'onlineCorrection', 'unimatch'}
+
+
 def load_ema_checkpoint(path, student, optimizer, teacher, config):
     """Restore an EMA run, not a legacy student-only model.pth."""
     checkpoint = torch.load(path, map_location='cpu', weights_only=True)
@@ -136,9 +187,11 @@ def load_ema_checkpoint(path, student, optimizer, teacher, config):
     ignored = {'epochs', 'resDir', 'emaResume', 'emaPreview', 'previewCount',
                'previewEvery', 'previewThreshold', 'previewBuffer', 'previewMinPixels'}
     ignored.update({'emaStageTransition', 'checkpointEvery'})
+    ignored.update({'backupDir', 'backupEvery', 'backupMilestones'})
     from sam2_lora import normalized_config
     saved_config = normalized_config(checkpoint['config'])
     config = normalized_config(config)
+    ignored.update(feedback_fork_overrides(saved_config, config))
     for key, value in {'seed': 0, 'resume': ''}.items():
         saved_config.setdefault(key, value)
         config.setdefault(key, value)
@@ -170,15 +223,25 @@ def load_ema_checkpoint(path, student, optimizer, teacher, config):
             raise ValueError(f'Resume configuration differs for {key!r}.')
     from sam2_lora import check_checkpoint_identity
     check_checkpoint_identity(checkpoint, config)
+    active = checkpoint.get('teacher') is not None
+    if active != (teacher is not None):
+        raise ValueError('Teacher activation state does not match checkpoint')
+    if not active and not (config.get('emaTeacher') and checkpoint['next_epoch'] < config.get('emaStartEpoch', 1)):
+        raise ValueError('Missing teacher outside delayed EMA warm-up')
     student.load_state_dict(checkpoint['student'], strict=True)
     optimizer.load_state_dict(checkpoint['optimizer'])
-    teacher.load_state_dict(checkpoint['teacher'])
+    if teacher is not None:
+        teacher.load_state_dict(checkpoint['teacher'])
+        teacher.global_step = int(checkpoint.get('global_step', teacher.num_updates))
     if transition:
+        if teacher is None:
+            raise ValueError('Stage transition requires an active teacher checkpoint')
         teacher.decay = float(config['emaDecay'])
         print(f'Stage transition: EMA decay -> {teacher.decay}; original checkpoint preserved.')
-    teacher.resume_training_state = None if transition else checkpoint.get('training_state')
-    if saved_config.get('resDir') != config.get('resDir'):
-        teacher.resume_training_state = None  # establish best models within the new output directory
+    if teacher is not None:
+        teacher.resume_training_state = None if transition else checkpoint.get('training_state')
+        if saved_config.get('resDir') != config.get('resDir'):
+            teacher.resume_training_state = None  # establish best models within the new output directory
 
     for name, parameter in student.named_parameters():
         grad = checkpoint['gradients'].get(name)
